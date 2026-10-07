@@ -1,10 +1,10 @@
-"""Automatically raise only YELLOW-zone Ozon seller prices by 3%.
+"""Automatically correct YELLOW-zone and small RED-zone Ozon seller prices.
 
 Safety rules:
 - only ordinary, in-stock products already classified as YELLOW by verified customer_price;
 - use current seller price from the live snapshot ("price.price" from /v5/product/info/prices);
 - raise by exactly 3% per run, rounded up to whole RUB;
-- never touch RED-zone items, clearance (УЦ), out-of-stock, missing-RRP, or unverified buyer-price items;
+- small RED gaps up to 250 RUB are raised by 2x the missing buyer-price amount; larger RED gaps are untouched;
 - after update the workflow rebuilds the live snapshot and rechecks customer_price.
 """
 from __future__ import annotations
