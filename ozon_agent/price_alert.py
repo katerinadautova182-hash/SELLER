@@ -13,7 +13,7 @@ import os
 from math import ceil
 from pathlib import Path
 
-from .business_rules import is_clearance_sku
+from .business_rules import is_clearance_sku, canonical_sku
 from .catalog import normalize_sku
 from .telegram import send_telegram
 
@@ -38,6 +38,8 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         "clearance_ignored": 0,
         "rrp_missing": 0,
         "checked": 0,
+        "price_not_verified": 0,
+        "unverified_offer_ids": [],
     }
     for item in snapshot.get("items", []):
         stats["total"] += 1
@@ -47,12 +49,15 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         if is_clearance_sku(offer_id):
             stats["clearance_ignored"] += 1
             continue
-        rrp = rrp_map.get(normalize_sku(offer_id))
+        reference_sku = canonical_sku(offer_id)
+        rrp = rrp_map.get(normalize_sku(reference_sku))
         if rrp is None:
             stats["rrp_missing"] += 1
             continue
         price = item.get("customer_price")
         if not item.get("customer_price_verified") or price in (None, 0, 0.0):
+            stats["price_not_verified"] += 1
+            stats["unverified_offer_ids"].append(offer_id)
             continue
         stats["checked"] += 1
         floor = float(ceil(rrp * RRP_FACTOR))
@@ -71,13 +76,16 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
             yellow.append(row)
     red.sort(key=lambda x: (-x["gap_to_rrp"], x["offer_id"]))
     yellow.sort(key=lambda x: (-x["gap_to_floor"], x["offer_id"]))
+    stats["unverified_offer_ids"].sort()
     return red, yellow, stats
 
 
-def fingerprint(red: list[dict], yellow: list[dict]) -> str:
+def fingerprint(red: list[dict], yellow: list[dict], stats: dict) -> str:
     canonical = {
         "red": [[v["offer_id"], round(v["customer_price"], 2), round(v["rrp"], 2)] for v in red],
         "yellow": [[v["offer_id"], round(v["customer_price"], 2), round(v["floor"], 2)] for v in yellow],
+        "price_not_verified": stats.get("unverified_offer_ids", []),
+        "rrp_missing": stats.get("rrp_missing", 0),
     }
     return hashlib.sha256(
         json.dumps(canonical, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -88,7 +96,11 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict) -> str:
     lines = [f"Ozon — контроль цены"]
     lines.append(f"🔴 Ниже РРЦ: {len(red)}")
     lines.append(f"🟡 От РРЦ до РРЦ+5%: {len(yellow)}")
-    lines.append(f"Проверено: {stats['checked']} SKU. УЦ исключена: {stats['clearance_ignored']}.")
+    lines.append(
+        f"Проверено: {stats['checked']} SKU. "
+        f"Цена не подтверждена после повторов: {stats['price_not_verified']}. "
+        f"УЦ исключена: {stats['clearance_ignored']}."
+    )
     if red:
         lines.append("")
         lines.append("🔴 Критично — ниже РРЦ")
@@ -105,6 +117,13 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict) -> str:
             floor = f"{v['floor']:,.0f}".replace(",", " ")
             gap = f"{v['gap_to_floor']:,.0f}".replace(",", " ")
             lines.append(f"• {v['offer_id']}: покупатель {p} ₽, зелёная зона от {floor} ₽ → не хватает {gap} ₽")
+    if stats["price_not_verified"]:
+        lines.append("")
+        lines.append("⚠️ Не удалось подтвердить цену покупателя после повторных запросов:")
+        for offer_id in stats["unverified_offer_ids"][:40]:
+            lines.append(f"• {offer_id}")
+        if len(stats["unverified_offer_ids"]) > 40:
+            lines.append(f"… ещё {len(stats['unverified_offer_ids']) - 40} SKU")
     if stats["rrp_missing"]:
         lines.append("")
         lines.append(f"⚠️ Без сопоставленного РРЦ: {stats['rrp_missing']} SKU.")
@@ -126,7 +145,7 @@ def main() -> None:
         snapshot = json.load(f)
 
     red, yellow, stats = collect_violations(snapshot, rrp_map)
-    fp = fingerprint(red, yellow)
+    fp = fingerprint(red, yellow, stats)
     state_path = Path(args.state)
     previous = {}
     if state_path.exists():
@@ -148,7 +167,7 @@ def main() -> None:
         print(f"Price status unchanged (red={len(red)}, yellow={len(yellow)}); Telegram skipped.")
         return
 
-    if not red and not yellow:
+    if not red and not yellow and not stats["price_not_verified"] and not stats["rrp_missing"]:
         if previous_count > 0:
             send_telegram("✅ Ozon — нарушения РРЦ устранены. Сейчас активных нарушений по обычным товарам нет.")
         else:
