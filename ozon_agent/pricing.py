@@ -63,3 +63,49 @@ def evaluate_sku(*, ozon_row: dict, purchase_price: float, rrp: float,
         target_margin_percent=target_margin_percent,
     ))
     return {**ozon_row, **asdict(result)}
+
+
+def fetch_customer_prices(client: OzonClient, skus: Iterable[int | str]) -> dict[str, dict]:
+    """Fetch storefront/customer prices.
+
+    Uses POST /v1/product/prices/details. The endpoint may require Premium Pro.
+    Failure to access it must NOT be treated as proof that the storefront price
+    is safe; callers should mark the buyer price as unverified.
+    """
+    clean = [str(x) for x in skus if x not in (None, "", 0, "0")]
+    out: dict[str, dict] = {}
+    for start in range(0, len(clean), 1000):
+        batch = clean[start:start + 1000]
+        data = client.post("/v1/product/prices/details", {"skus": batch})
+        for row in data.get("prices", []):
+            sku = str(row.get("sku") or "")
+            cp = row.get("customer_price") or {}
+            amount = cp.get("amount")
+            if not sku or amount in (None, ""):
+                continue
+            out[sku] = {
+                "customer_price": float(amount),
+                "currency": cp.get("currency"),
+                "offer_id": row.get("offer_id"),
+                "seller_promo_price": float((row.get("price") or {}).get("amount") or 0),
+            }
+    return out
+
+
+def evaluate_customer_price_policy(*, customer_price: float | None, rrp: float) -> tuple[str, str]:
+    """Hard RRP policy based on buyer-facing price only."""
+    if customer_price is None or customer_price <= 0:
+        return (
+            "PRICE_NOT_VERIFIED",
+            "Цена для покупателя не подтверждена; соблюдение РРЦ считать нельзя.",
+        )
+    floor = float(ceil(rrp * RRP_FLOOR_FACTOR))
+    if customer_price < floor:
+        return (
+            "CRITICAL",
+            f"Цена для покупателя {customer_price:.2f} ниже РРЦ+5% ({floor:.2f}).",
+        )
+    return (
+        "OK",
+        f"Цена для покупателя подтверждена и не ниже РРЦ+5% ({floor:.2f}).",
+    )
