@@ -93,9 +93,6 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
 def fingerprint(red: list[dict], yellow: list[dict], stats: dict) -> str:
     canonical = {
         "red": [[v["offer_id"], round(v["customer_price"], 2), round(v["rrp"], 2)] for v in red],
-        "yellow": [[v["offer_id"], round(v["customer_price"], 2), round(v["floor"], 2)] for v in yellow],
-        "price_not_verified": stats.get("unverified_offer_ids", []),
-        "rrp_missing": stats.get("rrp_missing_offer_ids", []),
     }
     return hashlib.sha256(
         json.dumps(canonical, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -103,43 +100,17 @@ def fingerprint(red: list[dict], yellow: list[dict], stats: dict) -> str:
 
 
 def format_message(red: list[dict], yellow: list[dict], stats: dict) -> str:
-    lines = [f"Ozon — контроль цены"]
-    lines.append(f"🔴 Ниже РРЦ: {len(red)}")
-    lines.append(f"🟡 От РРЦ до РРЦ+5%: {len(yellow)}")
-    lines.append(
-        f"Проверено: {stats['checked']} SKU. "
-        f"Цена не подтверждена после повторов: {stats['price_not_verified']}."
-    )
+    """Telegram report: only the RED zone. Yellow is auto-corrected silently."""
+    lines = ["Ozon — красная зона", f"🔴 Ниже РРЦ: {len(red)}"]
     if red:
         lines.append("")
-        lines.append("🔴 Критично — ниже РРЦ")
         for v in red:
             p = f"{v['customer_price']:,.0f}".replace(",", " ")
             rrp = f"{v['rrp']:,.0f}".replace(",", " ")
             gap = f"{v['gap_to_rrp']:,.0f}".replace(",", " ")
             lines.append(f"• {v['offer_id']}: покупатель {p} ₽, РРЦ {rrp} ₽ → ниже на {gap} ₽")
-    if yellow:
-        lines.append("")
-        lines.append("🟡 Жёлтая зона — РРЦ ≤ цена < РРЦ+5%")
-        for v in yellow:
-            p = f"{v['customer_price']:,.0f}".replace(",", " ")
-            floor = f"{v['floor']:,.0f}".replace(",", " ")
-            gap = f"{v['gap_to_floor']:,.0f}".replace(",", " ")
-            lines.append(f"• {v['offer_id']}: покупатель {p} ₽, зелёная зона от {floor} ₽ → не хватает {gap} ₽")
-    if stats["price_not_verified"]:
-        lines.append("")
-        lines.append("⚠️ Не удалось подтвердить цену покупателя после повторных запросов:")
-        for offer_id in stats["unverified_offer_ids"][:40]:
-            lines.append(f"• {offer_id}")
-        if len(stats["unverified_offer_ids"]) > 40:
-            lines.append(f"… ещё {len(stats['unverified_offer_ids']) - 40} SKU")
-    if stats["rrp_missing"]:
-        lines.append("")
-        lines.append(f"⚠️ Без сопоставленного РРЦ: {stats['rrp_missing']} SKU")
-        for offer_id in stats["rrp_missing_offer_ids"][:40]:
-            lines.append(f"• {offer_id}")
-        if len(stats["rrp_missing_offer_ids"]) > 40:
-            lines.append(f"… ещё {len(stats['rrp_missing_offer_ids']) - 40} SKU")
+    else:
+        lines.append("Нарушений ниже РРЦ нет.")
     return "\n".join(lines)
 
 
@@ -178,20 +149,17 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    if fp == previous_fp:
-        print(f"Price status unchanged (red={len(red)}, yellow={len(yellow)}); Telegram skipped.")
-        return
+    scheduled_report = os.getenv("GITHUB_EVENT_NAME", "").strip() == "schedule"
+    force_report = os.getenv("FORCE_RED_REPORT", "").strip().upper() == "YES"
 
-    if not red and not yellow and not stats["price_not_verified"] and not stats["rrp_missing"]:
-        if previous_count > 0:
-            send_telegram("✅ Ozon — нарушения РРЦ устранены. Сейчас активных нарушений по обычным товарам нет.")
-        else:
-            print("No violations; Telegram skipped.")
+    if not scheduled_report and not force_report and fp == previous_fp:
+        print(f"Red status unchanged (red={len(red)}); Telegram skipped.")
         return
 
     msg = format_message(red, yellow, stats)
     send_telegram(msg)
-    print(f"Sent changed price status: red={len(red)}, yellow={len(yellow)}.")
+    print(f"Sent red-zone report: red={len(red)}; yellow={len(yellow)} auto-managed silently.")
+
 
 
 if __name__ == "__main__":
