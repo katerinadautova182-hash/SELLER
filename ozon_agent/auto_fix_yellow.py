@@ -15,7 +15,6 @@ import os
 from math import ceil
 from pathlib import Path
 
-from ozon_export.client import OzonClient
 from .price_alert import load_rrp_map, collect_violations
 
 RAISE_FACTOR = 1.03
@@ -50,7 +49,7 @@ def plan_yellow_updates(snapshot: dict, rrp_map: dict[str, float]) -> list[dict]
     return planned
 
 
-def apply_updates(client: OzonClient, planned: list[dict]) -> list[dict]:
+def apply_updates(client, planned: list[dict]) -> list[dict]:
     results: list[dict] = []
     for row in planned:
         payload = {
@@ -95,6 +94,7 @@ def main() -> int:
         Path(args.output).write_text("[]", encoding="utf-8")
         return 0
 
+    from ozon_export.client import OzonClient
     client = OzonClient()
     results = apply_updates(client, planned)
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
