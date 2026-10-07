@@ -6,7 +6,7 @@ on:
     branches:
       - claude/ozon-seller-product-export-nubra0
   schedule:
-    - cron: "17 5 * * *"
+    - cron: "17 */6 * * *"
 
 jobs:
   margin-check:
