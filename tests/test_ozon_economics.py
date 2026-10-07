@@ -54,9 +54,14 @@ def test_customer_price_policy_requires_verified_price():
     assert status == "PRICE_NOT_VERIFIED"
 
 
-def test_customer_price_policy_uses_rrp_plus_5():
+def test_customer_price_policy_uses_red_yellow_green_zones():
     from ozon_agent.pricing import evaluate_customer_price_policy
-    status, _ = evaluate_customer_price_policy(customer_price=1049, rrp=1000)
+
+    status, _ = evaluate_customer_price_policy(customer_price=999, rrp=1000)
     assert status == "CRITICAL"
+
+    status, _ = evaluate_customer_price_policy(customer_price=1049, rrp=1000)
+    assert status == "WARNING"
+
     status, _ = evaluate_customer_price_policy(customer_price=1050, rrp=1000)
     assert status == "OK"
