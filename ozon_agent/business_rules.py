@@ -64,6 +64,7 @@ MANUAL_RRP_OVERRIDES = {
     normalize_sku("403 brown"): 4511.0,
     normalize_sku("403black"): 4511.0,
     normalize_sku("404"): 6546.0,
+    normalize_sku("801green"): 9824.0,
     normalize_sku("J201 LIGHT GREEN"): 845.0,
     normalize_sku("MS202"): 2088.0,
     normalize_sku("MS509"): 3900.0,
