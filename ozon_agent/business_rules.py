@@ -19,6 +19,15 @@ BOX_MULTIPLIERS = {
     normalize_sku("JDJ02-BOX"): (normalize_sku("JDJ02"), 10),
 }
 
+# Marketplace bundle SKU -> component SKUs.
+# Bundle purchase cost is the sum of the component purchase costs.
+BUNDLE_COMPONENTS = {
+    normalize_sku("MS9903R+ms101"): (
+        normalize_sku("MS9903R-2400"),
+        normalize_sku("MS101"),
+    ),
+}
+
 
 def canonical_sku(offer_id: str | None) -> str:
     """Return canonical reference SKU for RRP/purchase lookup."""
@@ -42,6 +51,10 @@ def manual_purchase_cost(offer_id: str | None) -> float | None:
 
 def box_rule(offer_id: str | None):
     return BOX_MULTIPLIERS.get(normalize_sku(offer_id))
+
+
+def bundle_components(offer_id: str | None):
+    return BUNDLE_COMPONENTS.get(normalize_sku(offer_id))
 
 
 # Confirmed manual RRP values that are not present in the current price list.
