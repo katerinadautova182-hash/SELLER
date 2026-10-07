@@ -46,8 +46,7 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         offer_id = str(item.get("offer_id") or "").strip()
         if item.get("customer_price_verified"):
             stats["verified"] += 1
-        if is_clearance_sku(offer_id):
-            stats["clearance_ignored"] += 1
+        if item.get("eligibility") in ("CLEARANCE", "OUT_OF_STOCK") or is_clearance_sku(offer_id):
             continue
         reference_sku = canonical_sku(offer_id)
         rrp = rrp_map.get(normalize_sku(reference_sku))
@@ -98,8 +97,7 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict) -> str:
     lines.append(f"🟡 От РРЦ до РРЦ+5%: {len(yellow)}")
     lines.append(
         f"Проверено: {stats['checked']} SKU. "
-        f"Цена не подтверждена после повторов: {stats['price_not_verified']}. "
-        f"УЦ исключена: {stats['clearance_ignored']}."
+        f"Цена не подтверждена после повторов: {stats['price_not_verified']}."
     )
     if red:
         lines.append("")
