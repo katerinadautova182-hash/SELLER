@@ -13,7 +13,7 @@ import os
 from math import ceil
 from pathlib import Path
 
-from .business_rules import is_clearance_sku, canonical_sku
+from .business_rules import is_clearance_sku, canonical_sku, manual_rrp
 from .catalog import normalize_sku
 from .telegram import send_telegram
 
@@ -50,7 +50,9 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         if item.get("eligibility") in ("CLEARANCE", "OUT_OF_STOCK") or is_clearance_sku(offer_id):
             continue
         reference_sku = canonical_sku(offer_id)
-        rrp = rrp_map.get(normalize_sku(reference_sku))
+        rrp = manual_rrp(offer_id)
+        if rrp is None:
+            rrp = rrp_map.get(normalize_sku(reference_sku))
         if rrp is None:
             stats["rrp_missing"] += 1
             stats["rrp_missing_offer_ids"].append(offer_id)
