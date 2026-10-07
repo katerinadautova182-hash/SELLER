@@ -46,3 +46,17 @@ def test_negative_profit_is_critical():
     ))
     assert r.profit_rub < 0
     assert r.status == "CRITICAL"
+
+
+def test_customer_price_policy_requires_verified_price():
+    from ozon_agent.pricing import evaluate_customer_price_policy
+    status, _ = evaluate_customer_price_policy(customer_price=None, rrp=1000)
+    assert status == "PRICE_NOT_VERIFIED"
+
+
+def test_customer_price_policy_uses_rrp_plus_5():
+    from ozon_agent.pricing import evaluate_customer_price_policy
+    status, _ = evaluate_customer_price_policy(customer_price=1049, rrp=1000)
+    assert status == "CRITICAL"
+    status, _ = evaluate_customer_price_policy(customer_price=1050, rrp=1000)
+    assert status == "OK"
