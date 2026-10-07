@@ -79,7 +79,7 @@ jobs:
         run: python -m ozon_agent.auto_fix_yellow --snapshot artifacts/ozon_catalog.json --output artifacts/auto_fix_yellow.json
 
       - name: Wait for Ozon storefront price propagation
-        run: sleep 45
+        run: sleep 90
 
       - name: Rebuild live snapshot after yellow-zone correction
         env:
