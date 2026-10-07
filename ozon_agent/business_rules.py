@@ -47,6 +47,16 @@ def box_rule(offer_id: str | None):
 # Confirmed manual RRP values that are not present in the current price list.
 MANUAL_RRP_OVERRIDES = {
     normalize_sku("PET GROOMING KIT"): 18700.0,
+    normalize_sku("403"): 4511.0,
+    normalize_sku("403 brown"): 4511.0,
+    normalize_sku("403black"): 4511.0,
+    normalize_sku("404"): 6546.0,
+    normalize_sku("J201 LIGHT GREEN"): 845.0,
+    normalize_sku("MS202"): 2088.0,
+    normalize_sku("MS509"): 3900.0,
+    normalize_sku("PB52"): 174.0,
+    normalize_sku("PB71"): 143.0,
+    normalize_sku("SF 03"): 1347.0,
 }
 
 
