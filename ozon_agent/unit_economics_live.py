@@ -22,47 +22,90 @@ from .catalog import normalize_sku
 from .margin import estimate_live_margin
 
 
-def load_cost_map() -> dict[str, float]:
+def load_cost_map() -> dict[str, dict]:
+    """Load cost records.
+
+    New format:
+      {"SKU": {"cost": 123.45, "source": "invoice ...", "verified": true}}
+
+    Plain numeric values from the old secret remain readable, but are explicitly
+    treated as unverified legacy values so they cannot be reported as reliable
+    unit economics.
+    """
     raw = os.getenv("PURCHASE_COST_MAP_B64", "").strip()
     if not raw:
         return {}
     decoded = base64.b64decode(raw).decode("utf-8")
     source = json.loads(decoded)
-    return {
-        normalize_sku(k): float(v)
-        for k, v in source.items()
-        if v not in (None, "") and float(v) > 0
-    }
+    out: dict[str, dict] = {}
+    for key, value in source.items():
+        if isinstance(value, dict):
+            cost = value.get("cost")
+            try:
+                cost = float(cost)
+            except (TypeError, ValueError):
+                continue
+            if cost <= 0:
+                continue
+            out[normalize_sku(key)] = {
+                "cost": cost,
+                "source": str(value.get("source") or "unknown"),
+                "verified": bool(value.get("verified")),
+            }
+        else:
+            try:
+                cost = float(value)
+            except (TypeError, ValueError):
+                continue
+            if cost <= 0:
+                continue
+            out[normalize_sku(key)] = {
+                "cost": cost,
+                "source": "legacy_unverified",
+                "verified": False,
+            }
+    return out
 
 
-def resolve_purchase_cost(offer_id: str, cost_map: dict[str, float]) -> tuple[float | None, str]:
+def _cost_record(cost_map: dict[str, dict], sku: str) -> dict | None:
+    return cost_map.get(normalize_sku(sku))
+
+
+def resolve_purchase_cost(
+    offer_id: str, cost_map: dict[str, dict]
+) -> tuple[float | None, str, bool]:
     manual = manual_purchase_cost(offer_id)
     if manual is not None:
-        return float(manual), "manual"
+        return float(manual), "manual_confirmed", True
 
     bundle = bundle_components(offer_id)
     if bundle:
-        vals = [cost_map.get(normalize_sku(x)) for x in bundle]
-        if all(v is not None and v > 0 for v in vals):
-            return float(sum(vals)), "bundle_sum"
-        return None, "bundle_missing_component"
+        records = [_cost_record(cost_map, x) for x in bundle]
+        if all(r and float(r["cost"]) > 0 for r in records):
+            verified = all(bool(r.get("verified")) for r in records)
+            sources = "+".join(str(r.get("source") or "unknown") for r in records)
+            return float(sum(float(r["cost"]) for r in records)), f"bundle:{sources}", verified
+        return None, "bundle_missing_component", False
 
     box = box_rule(offer_id)
     if box:
         base_sku, multiplier = box
-        base = cost_map.get(normalize_sku(base_sku))
-        if base is not None and base > 0:
-            return float(base) * float(multiplier), "box_multiplier"
-        return None, "box_base_missing"
+        record = _cost_record(cost_map, base_sku)
+        if record and float(record["cost"]) > 0:
+            return (
+                float(record["cost"]) * float(multiplier),
+                f"box:{record.get('source') or 'unknown'}",
+                bool(record.get("verified")),
+            )
+        return None, "box_base_missing", False
 
     canonical = canonical_sku(offer_id)
-    value = cost_map.get(normalize_sku(canonical))
-    if value is not None and value > 0:
-        return float(value), "cost_map"
-    value = cost_map.get(normalize_sku(offer_id))
-    if value is not None and value > 0:
-        return float(value), "cost_map_raw"
-    return None, "missing"
+    record = _cost_record(cost_map, canonical)
+    if record is None:
+        record = _cost_record(cost_map, offer_id)
+    if record and float(record["cost"]) > 0:
+        return float(record["cost"]), str(record.get("source") or "unknown"), bool(record.get("verified"))
+    return None, "missing", False
 
 
 def classify_margin(profit: float, margin_pct: float) -> str:
@@ -73,7 +116,7 @@ def classify_margin(profit: float, margin_pct: float) -> str:
     return "POSITIVE"
 
 
-def build_rows(snapshot: dict, cost_map: dict[str, float]) -> list[dict]:
+def build_rows(snapshot: dict, cost_map: dict[str, dict]) -> list[dict]:
     out: list[dict] = []
     for item in snapshot.get("items", []):
         if item.get("eligibility") != "ELIGIBLE":
@@ -82,7 +125,7 @@ def build_rows(snapshot: dict, cost_map: dict[str, float]) -> list[dict]:
         if not offer_id:
             continue
 
-        purchase_cost, cost_source = resolve_purchase_cost(offer_id, cost_map)
+        purchase_cost, cost_source, cost_verified = resolve_purchase_cost(offer_id, cost_map)
         base = {
             "offer_id": offer_id,
             "name": item.get("name") or "",
@@ -94,6 +137,7 @@ def build_rows(snapshot: dict, cost_map: dict[str, float]) -> list[dict]:
             "acquiring_rub": item.get("acquiring_rub"),
             "purchase_cost": purchase_cost,
             "purchase_cost_source": cost_source,
+            "purchase_cost_verified": cost_verified,
         }
 
         if purchase_cost is None:
@@ -113,6 +157,10 @@ def build_rows(snapshot: dict, cost_map: dict[str, float]) -> list[dict]:
             out.append({**base, "status": "INVALID", "error": str(exc)})
             continue
 
+        calculated_status = classify_margin(
+            m.profit_before_tax_ads_rub,
+            m.margin_before_tax_ads_percent,
+        )
         out.append({
             **base,
             "seller_revenue_rub": m.seller_revenue_rub,
@@ -123,10 +171,8 @@ def build_rows(snapshot: dict, cost_map: dict[str, float]) -> list[dict]:
             "profit_before_tax_ads_rub": m.profit_before_tax_ads_rub,
             "margin_before_tax_ads_percent": m.margin_before_tax_ads_percent,
             "revenue_source": m.revenue_source,
-            "status": classify_margin(
-                m.profit_before_tax_ads_rub,
-                m.margin_before_tax_ads_percent,
-            ),
+            "calculated_status": calculated_status,
+            "status": calculated_status if cost_verified else "UNVERIFIED_COST",
         })
     return out
 
@@ -157,20 +203,23 @@ def main() -> int:
         "seller_revenue_rub","purchase_cost","landed_cost_rub","commission_percent",
         "commission_rub","direct_logistics_rub","direct_acquiring_rub",
         "profit_before_tax_ads_rub","margin_before_tax_ads_percent",
-        "purchase_cost_source","revenue_source","status",
+        "purchase_cost_source","purchase_cost_verified","revenue_source",
+        "calculated_status","status",
     ]
     with csv_path.open("w", encoding="utf-8-sig", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore", delimiter=";")
         w.writeheader()
         w.writerows(rows)
 
-    ready = [x for x in rows if x.get("status") not in ("MISSING_COST","INVALID")]
+    ready = [x for x in rows if x.get("status") in ("LOSS", "THIN", "POSITIVE")]
     losses = [x for x in ready if x.get("status") == "LOSS"]
     thin = [x for x in ready if x.get("status") == "THIN"]
     missing = [x for x in rows if x.get("status") == "MISSING_COST"]
+    unverified = [x for x in rows if x.get("status") == "UNVERIFIED_COST"]
     print(
-        f"Unit economics: ready={len(ready)}, loss={len(losses)}, "
-        f"thin_margin={len(thin)}, missing_cost={len(missing)}."
+        f"Unit economics: verified_ready={len(ready)}, loss={len(losses)}, "
+        f"thin_margin={len(thin)}, unverified_cost={len(unverified)}, "
+        f"missing_cost={len(missing)}."
     )
     return 0
 
