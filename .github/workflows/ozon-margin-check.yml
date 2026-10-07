@@ -87,11 +87,6 @@ jobs:
           OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
         run: python -m ozon_agent.live_snapshot --output artifacts/ozon_catalog.json
 
-      - name: Build live unit economics
-        env:
-          PURCHASE_COST_MAP_B64: ${{ secrets.PURCHASE_COST_MAP_B64 }}
-        run: python -m ozon_agent.unit_economics_live --snapshot artifacts/ozon_catalog.json
-
       - name: Restore price alert state
         uses: actions/cache@v4
         with:
