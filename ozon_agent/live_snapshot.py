@@ -98,17 +98,7 @@ def main() -> int:
         if unresolved_products and round_no < 3:
             time.sleep(2.0 * round_no)
 
-    if unresolved_products:
-        sample = [
-            f"{offers.get(pid) or pid} [{','.join(skus_by_product.get(pid, [])) or 'NO_SKU'}]"
-            for pid in unresolved_products[:20]
-        ]
-        more = f" (+{len(unresolved_products)-20} ещё)" if len(unresolved_products) > 20 else ""
-        raise RuntimeError(
-            "Не удалось получить подтверждённую цену покупателя после повторных "
-            f"запросов для {len(unresolved_products)} товаров: "
-            + "; ".join(sample) + more
-        )
+    unresolved_set = set(unresolved_products)
 
     price_rows = fetch_price_rows(client, product_ids)
     rows = []
@@ -133,6 +123,10 @@ def main() -> int:
             ]
             if candidate_prices:
                 verified_products += 1
+            elif pid in unresolved_set and not is_clearance_sku(row["offer_id"]):
+                row["customer_price_status"] = "PRICE_NOT_VERIFIED"
+            else:
+                row["customer_price_status"] = "OK" if candidate_prices else "NOT_REQUIRED"
         rows.append(row)
 
     out = Path(args.output)
@@ -143,13 +137,18 @@ def main() -> int:
             "customer_price_endpoint_ok": True,
             "customer_price_error": None,
             "verified_products": verified_products,
+            "unresolved_products": len(unresolved_products),
+            "unresolved_offer_ids": [
+                str(offers.get(pid) or pid) for pid in unresolved_products
+            ],
             "items": rows,
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     print(
         f"Saved {len(rows)} Ozon items to {out}; "
-        f"verified buyer price for {verified_products} products."
+        f"verified buyer price for {verified_products} products; "
+        f"unresolved after retries: {len(unresolved_products)}."
     )
     return 0
 
