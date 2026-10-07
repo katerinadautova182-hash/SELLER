@@ -26,6 +26,12 @@ def send_telegram(text: str) -> bool:
         },
         timeout=30,
     )
-    response.raise_for_status()
+    if not response.ok:
+        try:
+            detail = response.json()
+        except Exception:
+            detail = {"status_code": response.status_code, "text": response.text[:500]}
+        print(f"Telegram API error: {detail}")
+        response.raise_for_status()
     print("Telegram notification sent.")
     return True
