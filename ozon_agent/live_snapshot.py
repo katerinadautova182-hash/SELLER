@@ -1,7 +1,8 @@
 """Read-only live Ozon catalog snapshot for the margin agent.
 
-RRP control requires a verified buyer-facing price for every non-clearance
-product. Missing prices are retried and never silently converted to None.
+RRP control is performed only for ordinary products that are actually in stock.
+Clearance (УЦ) and out-of-stock products are excluded before storefront-price
+requests and never enter the RRP report.
 """
 from __future__ import annotations
 
@@ -16,6 +17,20 @@ from .business_rules import is_clearance_sku
 from .pricing import fetch_price_rows, normalize_price_item, fetch_customer_prices
 
 
+def _product_has_stock(list_item: dict) -> bool:
+    """Use Ozon product/list stock flags when available.
+
+    If the API supplies both has_fbo_stocks and has_fbs_stocks, a product is
+    considered in stock when at least one is true. If those fields are absent,
+    we do not guess that the product is out of stock.
+    """
+    has_fbo = list_item.get("has_fbo_stocks")
+    has_fbs = list_item.get("has_fbs_stocks")
+    if has_fbo is None and has_fbs is None:
+        return True
+    return bool(has_fbo) or bool(has_fbs)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="artifacts/ozon_catalog.json")
@@ -23,7 +38,14 @@ def main() -> int:
 
     client = OzonClient()
     id_items = fetch_product_ids(client)
+
     product_ids = [int(x["product_id"]) for x in id_items if x.get("product_id")]
+    list_by_pid = {
+        int(x["product_id"]): x
+        for x in id_items
+        if x.get("product_id")
+    }
+
     info = fetch_products_info(client, product_ids)
 
     names = {}
@@ -58,24 +80,36 @@ def main() -> int:
 
         skus_by_product[pid] = product_skus
 
-    # First pass: retry omitted SKU values, but allow inactive source SKUs to remain absent.
+    eligibility: dict[int, str] = {}
+    eligible_pids: list[int] = []
+
+    for pid in product_ids:
+        offer_id = str(offers.get(pid) or list_by_pid.get(pid, {}).get("offer_id") or "").strip()
+        if is_clearance_sku(offer_id):
+            eligibility[pid] = "CLEARANCE"
+            continue
+        if not _product_has_stock(list_by_pid.get(pid, {})):
+            eligibility[pid] = "OUT_OF_STOCK"
+            continue
+        eligibility[pid] = "ELIGIBLE"
+        eligible_pids.append(pid)
+
+    eligible_skus: list[str] = []
+    for pid in eligible_pids:
+        eligible_skus.extend(skus_by_product.get(pid, []))
+
     customer_by_sku = fetch_customer_prices(
-        client, sku_to_product.keys(), attempts=3, retry_delay_seconds=2.0,
+        client,
+        eligible_skus,
+        attempts=3,
+        retry_delay_seconds=2.0,
         require_complete=False,
     )
 
-    # What matters for RRP control is at least one verified storefront price per
-    # ordinary product. Retry only unresolved products, product-by-product.
     unresolved_products: list[int] = []
-    for pid in product_ids:
-        offer_id = str(offers.get(pid) or "").strip()
-        if is_clearance_sku(offer_id):
-            continue
+    for pid in eligible_pids:
         skus = skus_by_product.get(pid, [])
-        if not skus:
-            unresolved_products.append(pid)
-            continue
-        if not any(s in customer_by_sku for s in skus):
+        if not skus or not any(s in customer_by_sku for s in skus):
             unresolved_products.append(pid)
 
     for round_no in range(1, 4):
@@ -88,7 +122,10 @@ def main() -> int:
                 still_missing.append(pid)
                 continue
             extra = fetch_customer_prices(
-                client, skus, attempts=1, retry_delay_seconds=0,
+                client,
+                skus,
+                attempts=1,
+                retry_delay_seconds=0,
                 require_complete=False,
             )
             customer_by_sku.update(extra)
@@ -100,6 +137,8 @@ def main() -> int:
 
     unresolved_set = set(unresolved_products)
 
+    # Pricing rows are still collected for diagnostics, but only ELIGIBLE rows
+    # enter RRP checking.
     price_rows = fetch_price_rows(client, product_ids)
     rows = []
     verified_products = 0
@@ -111,22 +150,32 @@ def main() -> int:
             pid = int(pid)
             row["name"] = names.get(pid, "")
             row["offer_id"] = row.get("offer_id") or offers.get(pid, "")
-            candidate_prices = [
-                customer_by_sku[s]["customer_price"]
-                for s in skus_by_product.get(pid, [])
-                if s in customer_by_sku
-            ]
-            row["customer_price"] = min(candidate_prices) if candidate_prices else None
-            row["customer_price_verified"] = bool(candidate_prices)
-            row["customer_price_skus"] = [
-                s for s in skus_by_product.get(pid, []) if s in customer_by_sku
-            ]
-            if candidate_prices:
-                verified_products += 1
-            elif pid in unresolved_set and not is_clearance_sku(row["offer_id"]):
-                row["customer_price_status"] = "PRICE_NOT_VERIFIED"
+            row["eligibility"] = eligibility.get(pid, "ELIGIBLE")
+            row["has_stock"] = row["eligibility"] != "OUT_OF_STOCK"
+
+            if row["eligibility"] == "ELIGIBLE":
+                candidate_prices = [
+                    customer_by_sku[s]["customer_price"]
+                    for s in skus_by_product.get(pid, [])
+                    if s in customer_by_sku
+                ]
+                row["customer_price"] = min(candidate_prices) if candidate_prices else None
+                row["customer_price_verified"] = bool(candidate_prices)
+                row["customer_price_skus"] = [
+                    s for s in skus_by_product.get(pid, []) if s in customer_by_sku
+                ]
+                if candidate_prices:
+                    verified_products += 1
+                    row["customer_price_status"] = "OK"
+                elif pid in unresolved_set:
+                    row["customer_price_status"] = "PRICE_NOT_VERIFIED"
+                else:
+                    row["customer_price_status"] = "PRICE_NOT_VERIFIED"
             else:
-                row["customer_price_status"] = "OK" if candidate_prices else "NOT_REQUIRED"
+                row["customer_price"] = None
+                row["customer_price_verified"] = False
+                row["customer_price_skus"] = []
+                row["customer_price_status"] = "NOT_REQUIRED"
         rows.append(row)
 
     out = Path(args.output)
@@ -134,6 +183,7 @@ def main() -> int:
     out.write_text(
         json.dumps({
             "count": len(rows),
+            "eligible_count": len(eligible_pids),
             "customer_price_endpoint_ok": True,
             "customer_price_error": None,
             "verified_products": verified_products,
@@ -147,8 +197,9 @@ def main() -> int:
     )
     print(
         f"Saved {len(rows)} Ozon items to {out}; "
-        f"verified buyer price for {verified_products} products; "
-        f"unresolved after retries: {len(unresolved_products)}."
+        f"eligible for RRP={len(eligible_pids)}; "
+        f"verified buyer price={verified_products}; "
+        f"unresolved after retries={len(unresolved_products)}."
     )
     return 0
 
