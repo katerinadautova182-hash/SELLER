@@ -5,13 +5,14 @@ This module is read-only. Mutation endpoints are intentionally absent in MVP-0.
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
 
-from ozon_export.client import OzonClient
+if TYPE_CHECKING:
+    from ozon_export.client import OzonClient
 from .economics import EconomicsInput, calculate_economics
 
 
-def fetch_price_rows(client: OzonClient, product_ids: Iterable[int]) -> list[dict]:
+def fetch_price_rows(client: "OzonClient", product_ids: Iterable[int]) -> list[dict]:
     ids = list(product_ids)
     out: list[dict] = []
     for start in range(0, len(ids), 1000):
@@ -65,7 +66,7 @@ def evaluate_sku(*, ozon_row: dict, purchase_price: float, rrp: float,
     return {**ozon_row, **asdict(result)}
 
 
-def fetch_customer_prices(client: OzonClient, skus: Iterable[int | str]) -> dict[str, dict]:
+def fetch_customer_prices(client: "OzonClient", skus: Iterable[int | str]) -> dict[str, dict]:
     """Fetch storefront/customer prices.
 
     Uses POST /v1/product/prices/details. The endpoint may require Premium Pro.
