@@ -70,6 +70,23 @@ jobs:
           OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
         run: python -m ozon_agent.live_snapshot --output artifacts/ozon_catalog.json
 
+      - name: Auto-fix yellow-zone prices (+3% seller price)
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          AUTO_FIX_YELLOW_ENABLED: "YES"
+        run: python -m ozon_agent.auto_fix_yellow --snapshot artifacts/ozon_catalog.json --output artifacts/auto_fix_yellow.json
+
+      - name: Wait for Ozon storefront price propagation
+        run: sleep 45
+
+      - name: Rebuild live snapshot after yellow-zone correction
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+        run: python -m ozon_agent.live_snapshot --output artifacts/ozon_catalog.json
+
       - name: Restore price alert state
         uses: actions/cache@v4
         with:
