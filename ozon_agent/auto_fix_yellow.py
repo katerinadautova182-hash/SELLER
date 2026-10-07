@@ -78,6 +78,11 @@ def main() -> int:
     ap.add_argument("--output", default="artifacts/auto_fix_yellow.json")
     args = ap.parse_args()
 
+    event_name = os.getenv("GITHUB_EVENT_NAME", "").strip()
+    if event_name not in ("schedule", "workflow_dispatch"):
+        print(f"Event {event_name or 'unknown'} is not allowed to change prices; skipped.")
+        return 0
+
     if os.getenv("AUTO_FIX_YELLOW_ENABLED", "").strip().upper() != "YES":
         print("AUTO_FIX_YELLOW_ENABLED is not YES; no prices changed.")
         return 0
