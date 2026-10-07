@@ -95,7 +95,7 @@ jobs:
           restore-keys: |
             ozon-price-alert-
 
-      - name: Send changed price violations to Telegram
+      - name: Send red-zone report to Telegram
         continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
