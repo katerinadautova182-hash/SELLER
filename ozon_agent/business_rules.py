@@ -8,6 +8,7 @@ SKU_ALIASES = {
     normalize_sku("MS509"): "MS 509",
     normalize_sku("701GREY"): "701C",
     normalize_sku("801GREEN"): "801з",
+    normalize_sku("JDJ02-BOX"): "JDJ02",
 }
 
 MANUAL_PURCHASE_COSTS = {
@@ -41,3 +42,13 @@ def manual_purchase_cost(offer_id: str | None) -> float | None:
 
 def box_rule(offer_id: str | None):
     return BOX_MULTIPLIERS.get(normalize_sku(offer_id))
+
+
+# Confirmed manual RRP values that are not present in the current price list.
+MANUAL_RRP_OVERRIDES = {
+    normalize_sku("PET GROOMING KIT"): 18700.0,
+}
+
+
+def manual_rrp(offer_id: str | None) -> float | None:
+    return MANUAL_RRP_OVERRIDES.get(normalize_sku(offer_id))
