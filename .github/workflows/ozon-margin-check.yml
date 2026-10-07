@@ -66,21 +66,6 @@ jobs:
           OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
         run: python -m ozon_agent.live_snapshot --output artifacts/ozon_catalog.json
 
-      - name: Telegram notification
-        continue-on-error: true
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          python - <<'PY'
-          import os
-          from ozon_agent.telegram import send_telegram
-          if os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID"):
-              send_telegram("Ozon agent: проверка выполнена. Подробные текстовые рекомендации будут подключены после финансовой сверки.")
-          else:
-              print("Telegram secrets are not configured; skipping.")
-          PY
-
       - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@v4
         with:
