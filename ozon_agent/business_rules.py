@@ -9,6 +9,7 @@ SKU_ALIASES = {
     normalize_sku("701GREY"): "701C",
     normalize_sku("801GREEN"): "801з",
     normalize_sku("JDJ02-BOX"): "JDJ02",
+    normalize_sku("MS9903R+ms101"): "MS9903R-2400",
 }
 
 MANUAL_PURCHASE_COSTS = {
