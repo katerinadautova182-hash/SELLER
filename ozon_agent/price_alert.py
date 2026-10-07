@@ -29,8 +29,9 @@ def load_rrp_map() -> dict[str, float]:
     return {normalize_sku(k): float(v) for k, v in source.items() if v not in (None, "")}
 
 
-def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[dict], dict]:
-    violations = []
+def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[dict], list[dict], dict]:
+    red = []
+    yellow = []
     stats = {
         "total": 0,
         "verified": 0,
@@ -56,37 +57,54 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         stats["checked"] += 1
         floor = float(ceil(rrp * RRP_FACTOR))
         price = float(price)
-        if price < floor:
-            violations.append({
-                "offer_id": offer_id,
-                "customer_price": price,
-                "rrp": rrp,
-                "floor": floor,
-                "gap": round(floor - price, 2),
-            })
-    violations.sort(key=lambda x: (-x["gap"], x["offer_id"]))
-    return violations, stats
+        row = {
+            "offer_id": offer_id,
+            "customer_price": price,
+            "rrp": rrp,
+            "floor": floor,
+            "gap_to_floor": round(floor - price, 2),
+            "gap_to_rrp": round(rrp - price, 2),
+        }
+        if price < rrp:
+            red.append(row)
+        elif price < floor:
+            yellow.append(row)
+    red.sort(key=lambda x: (-x["gap_to_rrp"], x["offer_id"]))
+    yellow.sort(key=lambda x: (-x["gap_to_floor"], x["offer_id"]))
+    return red, yellow, stats
 
 
-def fingerprint(violations: list[dict]) -> str:
-    canonical = [
-        [v["offer_id"], round(v["customer_price"], 2), round(v["floor"], 2)]
-        for v in violations
-    ]
+def fingerprint(red: list[dict], yellow: list[dict]) -> str:
+    canonical = {
+        "red": [[v["offer_id"], round(v["customer_price"], 2), round(v["rrp"], 2)] for v in red],
+        "yellow": [[v["offer_id"], round(v["customer_price"], 2), round(v["floor"], 2)] for v in yellow],
+    }
     return hashlib.sha256(
         json.dumps(canonical, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
 
 
-def format_message(violations: list[dict], stats: dict) -> str:
-    lines = [f"Ozon — нарушения цены: {len(violations)}"]
-    lines.append(f"Проверено по РРЦ: {stats['checked']} SKU. Уценка УЦ исключена: {stats['clearance_ignored']}.")
-    lines.append("")
-    for v in violations:
-        p = f"{v['customer_price']:,.0f}".replace(",", " ")
-        floor = f"{v['floor']:,.0f}".replace(",", " ")
-        gap = f"{v['gap']:,.0f}".replace(",", " ")
-        lines.append(f"🔴 {v['offer_id']}: покупатель {p} ₽, минимум {floor} ₽ → поднять минимум на {gap} ₽")
+def format_message(red: list[dict], yellow: list[dict], stats: dict) -> str:
+    lines = [f"Ozon — контроль цены"]
+    lines.append(f"🔴 Ниже РРЦ: {len(red)}")
+    lines.append(f"🟡 От РРЦ до РРЦ+5%: {len(yellow)}")
+    lines.append(f"Проверено: {stats['checked']} SKU. УЦ исключена: {stats['clearance_ignored']}.")
+    if red:
+        lines.append("")
+        lines.append("🔴 Критично — ниже РРЦ")
+        for v in red:
+            p = f"{v['customer_price']:,.0f}".replace(",", " ")
+            rrp = f"{v['rrp']:,.0f}".replace(",", " ")
+            gap = f"{v['gap_to_rrp']:,.0f}".replace(",", " ")
+            lines.append(f"• {v['offer_id']}: покупатель {p} ₽, РРЦ {rrp} ₽ → ниже на {gap} ₽")
+    if yellow:
+        lines.append("")
+        lines.append("🟡 Жёлтая зона — РРЦ ≤ цена < РРЦ+5%")
+        for v in yellow:
+            p = f"{v['customer_price']:,.0f}".replace(",", " ")
+            floor = f"{v['floor']:,.0f}".replace(",", " ")
+            gap = f"{v['gap_to_floor']:,.0f}".replace(",", " ")
+            lines.append(f"• {v['offer_id']}: покупатель {p} ₽, зелёная зона от {floor} ₽ → не хватает {gap} ₽")
     if stats["rrp_missing"]:
         lines.append("")
         lines.append(f"⚠️ Без сопоставленного РРЦ: {stats['rrp_missing']} SKU.")
@@ -107,8 +125,8 @@ def main() -> None:
     with open(args.snapshot, "r", encoding="utf-8") as f:
         snapshot = json.load(f)
 
-    violations, stats = collect_violations(snapshot, rrp_map)
-    fp = fingerprint(violations)
+    red, yellow, stats = collect_violations(snapshot, rrp_map)
+    fp = fingerprint(red, yellow)
     state_path = Path(args.state)
     previous = {}
     if state_path.exists():
@@ -122,24 +140,24 @@ def main() -> None:
 
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
-        json.dumps({"fingerprint": fp, "count": len(violations)}, ensure_ascii=False),
+        json.dumps({"fingerprint": fp, "count": len(red) + len(yellow)}, ensure_ascii=False),
         encoding="utf-8",
     )
 
     if fp == previous_fp:
-        print(f"Price violations unchanged ({len(violations)}); Telegram skipped.")
+        print(f"Price status unchanged (red={len(red)}, yellow={len(yellow)}); Telegram skipped.")
         return
 
-    if not violations:
+    if not red and not yellow:
         if previous_count > 0:
             send_telegram("✅ Ozon — нарушения РРЦ устранены. Сейчас активных нарушений по обычным товарам нет.")
         else:
             print("No violations; Telegram skipped.")
         return
 
-    msg = format_message(violations, stats)
+    msg = format_message(red, yellow, stats)
     send_telegram(msg)
-    print(f"Sent {len(violations)} changed price violations.")
+    print(f"Sent changed price status: red={len(red)}, yellow={len(yellow)}.")
 
 
 if __name__ == "__main__":
