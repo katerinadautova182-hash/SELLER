@@ -16,6 +16,7 @@ from math import ceil
 from pathlib import Path
 
 from .price_alert import load_rrp_map, collect_violations
+from .small_red_policy import plan_small_red_updates
 
 RAISE_FACTOR = 1.03
 
@@ -86,8 +87,13 @@ def main() -> int:
         raise RuntimeError("RRP_MAP_B64 is not configured")
 
     snapshot = json.loads(Path(args.snapshot).read_text(encoding="utf-8"))
-    planned = plan_yellow_updates(snapshot, rrp_map)
-    print(f"Yellow-zone seller price updates planned: {len(planned)}")
+    yellow_planned = plan_yellow_updates(snapshot, rrp_map)
+    red_planned = plan_small_red_updates(snapshot, rrp_map)
+    planned = yellow_planned + red_planned
+    print(
+        f"Auto price updates planned: total={len(planned)}, "
+        f"yellow={len(yellow_planned)}, small_red={len(red_planned)}"
+    )
 
     if not planned:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
@@ -105,7 +111,7 @@ def main() -> int:
 
     ok = [x for x in results if x["api_updated"]]
     failed = [x for x in results if not x["api_updated"]]
-    print(f"Yellow-zone prices updated: {len(ok)}; failed: {len(failed)}")
+    print(f"Auto prices updated: {len(ok)}; failed: {len(failed)}")
     for x in ok:
         print(
             f"UPDATED {x['offer_id']}: seller {x['seller_price_before']:.0f} -> "
