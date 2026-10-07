@@ -37,6 +37,7 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         "verified": 0,
         "clearance_ignored": 0,
         "rrp_missing": 0,
+        "rrp_missing_offer_ids": [],
         "checked": 0,
         "price_not_verified": 0,
         "unverified_offer_ids": [],
@@ -52,6 +53,7 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         rrp = rrp_map.get(normalize_sku(reference_sku))
         if rrp is None:
             stats["rrp_missing"] += 1
+            stats["rrp_missing_offer_ids"].append(offer_id)
             continue
         price = item.get("customer_price")
         if not item.get("customer_price_verified") or price in (None, 0, 0.0):
@@ -76,6 +78,7 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
     red.sort(key=lambda x: (-x["gap_to_rrp"], x["offer_id"]))
     yellow.sort(key=lambda x: (-x["gap_to_floor"], x["offer_id"]))
     stats["unverified_offer_ids"].sort()
+    stats["rrp_missing_offer_ids"].sort()
     return red, yellow, stats
 
 
@@ -84,7 +87,7 @@ def fingerprint(red: list[dict], yellow: list[dict], stats: dict) -> str:
         "red": [[v["offer_id"], round(v["customer_price"], 2), round(v["rrp"], 2)] for v in red],
         "yellow": [[v["offer_id"], round(v["customer_price"], 2), round(v["floor"], 2)] for v in yellow],
         "price_not_verified": stats.get("unverified_offer_ids", []),
-        "rrp_missing": stats.get("rrp_missing", 0),
+        "rrp_missing": stats.get("rrp_missing_offer_ids", []),
     }
     return hashlib.sha256(
         json.dumps(canonical, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -124,7 +127,11 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict) -> str:
             lines.append(f"… ещё {len(stats['unverified_offer_ids']) - 40} SKU")
     if stats["rrp_missing"]:
         lines.append("")
-        lines.append(f"⚠️ Без сопоставленного РРЦ: {stats['rrp_missing']} SKU.")
+        lines.append(f"⚠️ Без сопоставленного РРЦ: {stats['rrp_missing']} SKU")
+        for offer_id in stats["rrp_missing_offer_ids"][:40]:
+            lines.append(f"• {offer_id}")
+        if len(stats["rrp_missing_offer_ids"]) > 40:
+            lines.append(f"… ещё {len(stats['rrp_missing_offer_ids']) - 40} SKU")
     return "\n".join(lines)
 
 
