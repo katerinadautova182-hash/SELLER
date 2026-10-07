@@ -11,6 +11,8 @@ on:
 jobs:
   margin-check:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
     permissions:
       contents: read
 
