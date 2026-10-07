@@ -5,7 +5,7 @@ import argparse
 import json
 
 from ozon_export.client import OzonClient
-from ozon_export.products import _fetch_product_ids
+from ozon_export.products import fetch_product_ids
 from .catalog import Catalog
 from .loaders import load_alias_csv, load_rrp_csv
 from .report import build_readiness_report
@@ -20,7 +20,8 @@ def main() -> int:
 
     catalog = Catalog.from_rows(load_alias_csv(args.aliases), load_rrp_csv(args.rrp))
     client = OzonClient()
-    product_ids = _fetch_product_ids(client)
+    id_items = fetch_product_ids(client)
+    product_ids = [it.get("product_id") for it in id_items if it.get("product_id")]
     # Product list contains product_id only; use product info to recover offer_id.
     offer_ids: list[str] = []
     for start in range(0, len(product_ids), 100):
