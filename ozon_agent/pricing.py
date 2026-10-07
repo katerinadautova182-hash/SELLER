@@ -5,11 +5,12 @@ This module is read-only. Mutation endpoints are intentionally absent in MVP-0.
 from __future__ import annotations
 
 from dataclasses import asdict
+from math import ceil
 from typing import Iterable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ozon_export.client import OzonClient
-from .economics import EconomicsInput, calculate_economics
+from .economics import EconomicsInput, calculate_economics, RRP_FLOOR_FACTOR
 
 
 def fetch_price_rows(client: "OzonClient", product_ids: Iterable[int]) -> list[dict]:
