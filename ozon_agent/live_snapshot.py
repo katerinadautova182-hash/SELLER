@@ -1,12 +1,18 @@
-"""Read-only live Ozon catalog snapshot for the margin agent."""
+"""Read-only live Ozon catalog snapshot for the margin agent.
+
+RRP control requires a verified buyer-facing price for every non-clearance
+product. Missing prices are retried and never silently converted to None.
+"""
 from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 from ozon_export.client import OzonClient
 from ozon_export.products import fetch_product_ids, fetch_products_info
+from .business_rules import is_clearance_sku
 from .pricing import fetch_price_rows, normalize_price_item, fetch_customer_prices
 
 
@@ -24,6 +30,7 @@ def main() -> int:
     offers = {}
     skus_by_product: dict[int, list[str]] = {}
     sku_to_product: dict[str, int] = {}
+
     for item in info:
         pid = item.get("id", item.get("product_id"))
         if pid is None:
@@ -31,33 +38,82 @@ def main() -> int:
         pid = int(pid)
         names[pid] = item.get("name", "")
         offers[pid] = item.get("offer_id", "")
+
         product_skus: list[str] = []
         for source in item.get("sources", []) or []:
             sku = source.get("sku")
             if sku not in (None, "", 0, "0"):
                 s = str(sku)
-                product_skus.append(s)
+                if s not in product_skus:
+                    product_skus.append(s)
                 sku_to_product[s] = pid
+
         for key in ("fbo_sku", "fbs_sku"):
             sku = item.get(key)
             if sku not in (None, "", 0, "0"):
                 s = str(sku)
                 if s not in product_skus:
                     product_skus.append(s)
-                    sku_to_product[s] = pid
+                sku_to_product[s] = pid
+
         skus_by_product[pid] = product_skus
 
-    customer_price_error = None
-    customer_by_sku: dict[str, dict] = {}
-    try:
-        customer_by_sku = fetch_customer_prices(client, sku_to_product.keys())
-    except Exception as exc:
-        # Access to /v1/product/prices/details may require Premium Pro.
-        # Never fall back to seller price and call it a verified buyer price.
-        customer_price_error = f"{type(exc).__name__}: {exc}"
+    # First pass: retry omitted SKU values, but allow inactive source SKUs to remain absent.
+    customer_by_sku = fetch_customer_prices(
+        client, sku_to_product.keys(), attempts=3, retry_delay_seconds=2.0,
+        require_complete=False,
+    )
+
+    # What matters for RRP control is at least one verified storefront price per
+    # ordinary product. Retry only unresolved products, product-by-product.
+    unresolved_products: list[int] = []
+    for pid in product_ids:
+        offer_id = str(offers.get(pid) or "").strip()
+        if is_clearance_sku(offer_id):
+            continue
+        skus = skus_by_product.get(pid, [])
+        if not skus:
+            unresolved_products.append(pid)
+            continue
+        if not any(s in customer_by_sku for s in skus):
+            unresolved_products.append(pid)
+
+    for round_no in range(1, 4):
+        if not unresolved_products:
+            break
+        still_missing: list[int] = []
+        for pid in unresolved_products:
+            skus = skus_by_product.get(pid, [])
+            if not skus:
+                still_missing.append(pid)
+                continue
+            extra = fetch_customer_prices(
+                client, skus, attempts=1, retry_delay_seconds=0,
+                require_complete=False,
+            )
+            customer_by_sku.update(extra)
+            if not any(s in customer_by_sku for s in skus):
+                still_missing.append(pid)
+        unresolved_products = still_missing
+        if unresolved_products and round_no < 3:
+            time.sleep(2.0 * round_no)
+
+    if unresolved_products:
+        sample = [
+            f"{offers.get(pid) or pid} [{','.join(skus_by_product.get(pid, [])) or 'NO_SKU'}]"
+            for pid in unresolved_products[:20]
+        ]
+        more = f" (+{len(unresolved_products)-20} ещё)" if len(unresolved_products) > 20 else ""
+        raise RuntimeError(
+            "Не удалось получить подтверждённую цену покупателя после повторных "
+            f"запросов для {len(unresolved_products)} товаров: "
+            + "; ".join(sample) + more
+        )
 
     price_rows = fetch_price_rows(client, product_ids)
     rows = []
+    verified_products = 0
+
     for raw in price_rows:
         row = normalize_price_item(raw)
         pid = row.get("product_id")
@@ -70,12 +126,13 @@ def main() -> int:
                 for s in skus_by_product.get(pid, [])
                 if s in customer_by_sku
             ]
-            # Lowest verified buyer-facing price is the only safe value for RRP control.
             row["customer_price"] = min(candidate_prices) if candidate_prices else None
             row["customer_price_verified"] = bool(candidate_prices)
             row["customer_price_skus"] = [
                 s for s in skus_by_product.get(pid, []) if s in customer_by_sku
             ]
+            if candidate_prices:
+                verified_products += 1
         rows.append(row)
 
     out = Path(args.output)
@@ -83,13 +140,17 @@ def main() -> int:
     out.write_text(
         json.dumps({
             "count": len(rows),
-            "customer_price_endpoint_ok": customer_price_error is None,
-            "customer_price_error": customer_price_error,
+            "customer_price_endpoint_ok": True,
+            "customer_price_error": None,
+            "verified_products": verified_products,
             "items": rows,
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print(f"Saved {len(rows)} Ozon items to {out}.")
+    print(
+        f"Saved {len(rows)} Ozon items to {out}; "
+        f"verified buyer price for {verified_products} products."
+    )
     return 0
 
 
