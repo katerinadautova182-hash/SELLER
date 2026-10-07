@@ -150,6 +150,8 @@ def main() -> None:
         snapshot = json.load(f)
 
     red, yellow, stats = collect_violations(snapshot, rrp_map)
+    if stats.get("rrp_missing_offer_ids"):
+        print("RRP missing offer_ids: " + json.dumps(stats["rrp_missing_offer_ids"], ensure_ascii=False))
     fp = fingerprint(red, yellow, stats)
     state_path = Path(args.state)
     previous = {}
