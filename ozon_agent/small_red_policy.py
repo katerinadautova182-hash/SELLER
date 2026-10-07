@@ -18,6 +18,9 @@ def plan_small_red_updates(snapshot, rrp_map):
         if seller <= 0:
             continue
         increase = float(ceil(gap * 2))
+        min_price = float(item.get("ozon_min_price") or 0)
+        if min_price >= float(ceil(seller + increase)):
+            min_price = 0.0
         out.append({
             "offer_id": v["offer_id"],
             "seller_price_before": seller,
@@ -26,5 +29,7 @@ def plan_small_red_updates(snapshot, rrp_map):
             "gap_to_rrp": gap,
             "rrp": float(v["rrp"]),
             "customer_price_before": float(v["customer_price"]),
+            "green_floor": float(v["floor"]),
+            "min_price": min_price,
         })
     return out
