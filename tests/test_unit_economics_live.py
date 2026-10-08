@@ -51,3 +51,41 @@ def test_legacy_numeric_cost_is_not_treated_as_verified():
         {"A": {"cost": 400.0, "source": "legacy_unverified", "verified": False}},
     )
     assert rows[0]["status"] == "UNVERIFIED_COST"
+
+
+def test_auto_alias_cost_is_rejected():
+    cost, source, verified = resolve_purchase_cost(
+        "A",
+        {"A": {"cost": 999.0, "source": "AUTO_ALIAS", "verified": True}},
+    )
+    assert cost is None
+    assert source == "missing"
+    assert verified is False
+
+
+def test_legacy_unverified_cost_is_rejected():
+    cost, source, verified = resolve_purchase_cost(
+        "A",
+        {"A": {"cost": 999.0, "source": "legacy_unverified", "verified": False}},
+    )
+    assert cost is None
+    assert source == "missing"
+    assert verified is False
+
+
+def test_304_and_j304_are_distinct_confirmed_costs():
+    cost_304, source_304, verified_304 = resolve_purchase_cost("304", {})
+    cost_j304, source_j304, verified_j304 = resolve_purchase_cost("J304", {})
+    assert cost_304 == 1240.0
+    assert cost_j304 == 159.0
+    assert source_304 == "manual_confirmed"
+    assert source_j304 == "manual_confirmed"
+    assert verified_304 is True
+    assert verified_j304 is True
+
+
+def test_203_does_not_fall_through_to_j203():
+    cost, source, verified = resolve_purchase_cost("203", {})
+    assert cost == 825.0
+    assert source == "manual_confirmed"
+    assert verified is True
