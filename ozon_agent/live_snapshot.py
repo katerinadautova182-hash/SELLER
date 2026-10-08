@@ -150,6 +150,7 @@ def main() -> int:
             pid = int(pid)
             row["name"] = names.get(pid, "")
             row["offer_id"] = row.get("offer_id") or offers.get(pid, "")
+            row["all_skus"] = list(skus_by_product.get(pid, []))
             row["eligibility"] = eligibility.get(pid, "ELIGIBLE")
             row["has_stock"] = row["eligibility"] != "OUT_OF_STOCK"
 
