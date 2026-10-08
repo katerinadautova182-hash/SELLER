@@ -23,7 +23,7 @@ def test_profitability_uses_net_units_and_135_cost():
     assert r["cogs_rub"] == 540
     assert r["contribution_profit_rub"] == 190
     assert r["contribution_margin_percent"] == 19
-    assert r["status"] == "MEDIUM"
+    assert r["status"] == "YELLOW"
 
     s=build_summary(rows,-50)
     assert s["sku_contribution_profit_rub"] == 190
