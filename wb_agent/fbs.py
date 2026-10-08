@@ -48,6 +48,8 @@ def available_nmids(marketplace_token, content_token):
     warehouses = request(MARKETPLACE + "/api/v3/warehouses", marketplace_token)
     if not isinstance(warehouses, list):
         raise ValueError("Unexpected warehouse list")
+    if not warehouses:
+        raise ValueError("No FBS warehouses returned")
     ids = sorted(set().union(*mapping.values()))
     qty = defaultdict(int)
     for warehouse in warehouses:
