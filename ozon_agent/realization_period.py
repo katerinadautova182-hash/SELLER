@@ -42,6 +42,7 @@ def aggregate_realization_period(client, date_from: str, date_to: str) -> dict[s
         "economic_sales_base_rub":0.0,
         "ozon_sales_fee_rub":0.0,
         "commission_ratio":0.0,
+        "posting_numbers":set(),
     })
 
     for year,month in months:
@@ -83,11 +84,19 @@ def aggregate_realization_period(client, date_from: str, date_to: str) -> dict[s
             r["economic_sales_base_rub"] += seller_price * qty
             r["ozon_sales_fee_rub"] += float(dc.get("standard_fee") or 0)
             r["commission_ratio"]=float(row.get("commission_ratio") or 0)
+            posting_number=str(order.get("posting_number") or "").strip()
+            if posting_number:
+                r["posting_numbers"].add(posting_number)
 
-    return {
-        sku:{
-            k:round(v,2) if isinstance(v,float) else v
-            for k,v in row.items()
-        }
-        for sku,row in out.items()
-    }
+    result={}
+    for sku,row in out.items():
+        clean={}
+        for k,v in row.items():
+            if k=="posting_numbers":
+                clean[k]=sorted(v)
+            elif isinstance(v,float):
+                clean[k]=round(v,2)
+            else:
+                clean[k]=v
+        result[sku]=clean
+    return result
