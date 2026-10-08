@@ -2,6 +2,12 @@ name: WB Price Check (Read Only)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/wb-price-check.yml"
+      - "wb_agent/**"
 
 concurrency:
   group: wb-price-check
