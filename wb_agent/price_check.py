@@ -87,7 +87,7 @@ def analyze(items, rrp):
             continue
         sizes = item.get("sizes") or []
         for size in sizes:
-            price = size.get("discountedPrice")
+            price = size.get("clubDiscountedPrice")
             if price is None or float(price) <= 0:
                 unpriced.append(sku or nm_id)
                 continue
@@ -103,15 +103,15 @@ def analyze(items, rrp):
 
 
 def format_report(items, red, yellow, missing, unpriced):
-    lines = ["WB — проверка цен продавца (без изменений)",
+    lines = ["WB — клубные цены (не финальная цена покупателя)",
              "Товаров в API: " + str(len(items)),
-             "Ниже РРЦ: " + str(len(red)),
-             "Между РРЦ и РРЦ + 5%: " + str(len(yellow)),
+             "Клубная цена ниже РРЦ: " + str(len(red)),
+             "Клубная цена ниже РРЦ + 5%: " + str(len(yellow)),
              "Без сопоставления РРЦ: " + str(len(missing)),
-             "Без цены: " + str(len(unpriced)),
+             "Без клубной цены: " + str(len(unpriced)),
              "",
-             "Важно: цена после скидки продавца, не персональная цена покупателя."]
-    for title, rows in (("Ниже РРЦ", red), ("Ниже РРЦ + 5%", yellow)):
+             "ВАЖНО: цена с WB Кошельком НЕ ПОЛУЧЕНА; это НЕ минимальная цена покупателя. Нарушения не подтверждены."]
+    for title, rows in (("Клубная цена ниже РРЦ", red), ("Клубная цена ниже РРЦ + 5%", yellow)):
         if rows:
             lines.extend(("", title))
             for row in rows[:30]:
@@ -169,7 +169,7 @@ def main():
     with open("artifacts/wb-match-candidates.json", "w", encoding="utf-8") as file:
         json.dump(candidates, file, ensure_ascii=False, indent=2)
     with open("artifacts/wb-price-summary.json", "w", encoding="utf-8") as file:
-        json.dump({"total": len(items), "red": len(red), "yellow": len(yellow),
+        json.dump({"total": len(items), "club_below_rrp": len(red), "club_below_floor": len(yellow), "wallet_price_verified": False,
                    "no_rrp": len(missing), "no_price": len(unpriced)}, file, ensure_ascii=False, indent=2)
 
 
