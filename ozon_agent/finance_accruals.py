@@ -97,29 +97,37 @@ def aggregate_sku_finance(accruals: list[dict]) -> dict[str, dict]:
     })
 
     for acc in accruals:
-        posting = acc.get("posting") or {}
-        for p in posting.get("products") or []:
-            sku = str(p.get("sku") or "")
-            if not sku:
-                continue
-            r = result[sku]
-            r["operations"] += 1
-            commission = p.get("commission") or {}
-            r["sale_amount_rub"] += money(commission.get("sale_amount"))
-            r["seller_price_rub"] += money(commission.get("seller_price"))
-            r["sale_commission_rub"] += money(commission.get("sale_commission"))
-            r["delivery_rub"] += money((p.get("delivery") or {}).get("total_accrued"))
+        category = str(acc.get("accrued_category") or "").upper()
 
-        for grp in ((acc.get("item_fees") or {}).get("fees") or []):
-            sku = str(grp.get("sku") or "")
-            if not sku:
-                continue
-            for fee in grp.get("fees") or []:
-                amount = money(fee.get("accrued"))
-                type_id = fee.get("type_id")
-                result[sku]["item_fees_rub"] += amount
-                if type_id in (10, 25) and amount > 0:
-                    result[sku]["item_compensation_rub"] += amount
+        # Product sale economics belong only to POSTING accruals.
+        # ITEM/NON_ITEM rows can carry posting context too; summing product
+        # commission fields from them would duplicate sales and commissions.
+        if category == "POSTING":
+            posting = acc.get("posting") or {}
+            for p in posting.get("products") or []:
+                sku = str(p.get("sku") or "")
+                if not sku:
+                    continue
+                r = result[sku]
+                r["operations"] += 1
+                commission = p.get("commission") or {}
+                r["sale_amount_rub"] += money(commission.get("sale_amount"))
+                r["seller_price_rub"] += money(commission.get("seller_price"))
+                r["sale_commission_rub"] += money(commission.get("sale_commission"))
+                r["delivery_rub"] += money((p.get("delivery") or {}).get("total_accrued"))
+
+        # Item-level services belong to ITEM accruals.
+        if category == "ITEM":
+            for grp in ((acc.get("item_fees") or {}).get("fees") or []):
+                sku = str(grp.get("sku") or "")
+                if not sku:
+                    continue
+                for fee in grp.get("fees") or []:
+                    amount = money(fee.get("accrued"))
+                    type_id = fee.get("type_id")
+                    result[sku]["item_fees_rub"] += amount
+                    if type_id in (10, 25) and amount > 0:
+                        result[sku]["item_compensation_rub"] += amount
 
     out = {}
     for sku, vals in result.items():
@@ -145,6 +153,8 @@ def aggregate_non_item_finance(accruals: list[dict], type_map: dict[int, dict] |
     type_map = type_map or {}
     result = defaultdict(lambda: {"amount_rub": 0.0, "operations": 0})
     for acc in accruals:
+        if str(acc.get("accrued_category") or "").upper() != "NON_ITEM":
+            continue
         fee = acc.get("non_item_fee")
         if not fee:
             continue
