@@ -1,3 +1,7 @@
+import os
+os.environ.setdefault("OZON_CLIENT_ID", "test")
+os.environ.setdefault("OZON_API_KEY", "test")
+
 from ozon_agent.finance_accruals import aggregate_sku_finance, aggregate_non_item_finance
 from ozon_agent.finance_by_sku import combine_period
 
