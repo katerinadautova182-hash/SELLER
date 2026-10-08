@@ -68,7 +68,13 @@ def load_cost_map() -> dict[str, dict]:
 
 
 def _cost_record(cost_map: dict[str, dict], sku: str) -> dict | None:
-    return cost_map.get(normalize_sku(sku))
+    record = cost_map.get(normalize_sku(sku))
+    if not record:
+        return None
+    source = str(record.get("source") or "").upper()
+    if "AUTO_ALIAS" in source or "LEGACY" in source:
+        return None
+    return record
 
 
 def resolve_purchase_cost(
