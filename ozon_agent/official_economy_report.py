@@ -49,6 +49,9 @@ def _base_offer(offer):
 
 def _resolve(offer,cost_map):
     cost,source,verified=resolve_purchase_cost(offer,cost_map)
+    source_text=str(source or "").upper()
+    if cost is not None and ("AUTO_ALIAS" in source_text or "LEGACY" in source_text):
+        return None,source,False
     if cost is not None:
         return cost,source,verified
     if is_clearance_sku(offer):
@@ -168,8 +171,7 @@ def main():
     if not cost_map:
         raise RuntimeError("PURCHASE_COST_MAP_B64 is empty")
     rows=read_official_report(args.report)
-    allow=os.getenv("ALLOW_LEGACY_COSTS","").upper() in {"YES","TRUE","1"}
-    result=calculate(rows,cost_map,allow)
+    result=calculate(rows,cost_map,False)
     write_csv(args.output,result)
     print("Official Ozon Economy parsed:",
           "rows=",len(result),
