@@ -87,7 +87,6 @@ jobs:
           PURCHASE_COST_MAP_B64: ${{ secrets.PURCHASE_COST_MAP_B64 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          ALLOW_LEGACY_COSTS: "YES"
         run: |
           python -m ozon_agent.profitability_period \
             --date-from "${{ env.REPORT_DATE_FROM }}" \
