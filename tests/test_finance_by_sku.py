@@ -7,35 +7,54 @@ from ozon_agent.finance_by_sku import combine_period
 
 
 def sample_accruals():
-    return [{
-        "posting": {
-            "products": [{
-                "sku": 123,
-                "commission": {
-                    "seller_price": {"amount": "1000"},
-                    "sale_amount": {"amount": "1200"},
-                    "sale_commission": {"amount": "-200"},
-                },
-                "delivery": {"total_accrued": {"amount": "-80"}},
-            }]
+    return [
+        {
+            "accrued_category": "POSTING",
+            "posting": {
+                "products": [{
+                    "sku": 123,
+                    "commission": {
+                        "seller_price": {"amount": "1000"},
+                        "sale_amount": {"amount": "1200"},
+                        "sale_commission": {"amount": "-200"},
+                    },
+                    "delivery": {"total_accrued": {"amount": "-80"}},
+                }]
+            },
         },
-        "item_fees": {
-            "fees": [{
-                "sku": 123,
-                "fees": [
-                    {"type_id": 1, "accrued": {"amount": "-20"}},
-                    {"type_id": 25, "accrued": {"amount": "50"}},
-                ],
-            }]
+        {
+            "accrued_category": "ITEM",
+            "posting": {
+                "products": [{
+                    "sku": 123,
+                    "commission": {
+                        "seller_price": {"amount": "1000"},
+                        "sale_amount": {"amount": "1200"},
+                        "sale_commission": {"amount": "-200"},
+                    },
+                }]
+            },
+            "item_fees": {
+                "fees": [{
+                    "sku": 123,
+                    "fees": [
+                        {"type_id": 1, "accrued": {"amount": "-20"}},
+                        {"type_id": 25, "accrued": {"amount": "50"}},
+                    ],
+                }]
+            },
         },
-        "non_item_fee": {
-            "type_id": 54,
-            "accrued": {"amount": "-300"},
+        {
+            "accrued_category": "NON_ITEM",
+            "non_item_fee": {
+                "type_id": 54,
+                "accrued": {"amount": "-300"},
+            },
         },
-    }]
+    ]
 
 
-def test_item_finance_preserves_signs_and_net():
+def test_item_finance_does_not_duplicate_posting_fields_from_item_rows():
     rows = aggregate_sku_finance(sample_accruals())
     row = rows["123"]
     assert row["seller_price_rub"] == 1000
