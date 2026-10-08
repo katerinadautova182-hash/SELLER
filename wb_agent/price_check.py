@@ -4,6 +4,7 @@ Uses only the official Prices and Discounts API. Never modifies prices.
 WB seller/club discounted prices are NOT guaranteed buyer storefront prices.
 """
 import base64
+import difflib
 import json
 import os
 import sys
@@ -152,6 +153,21 @@ def main():
     os.makedirs("artifacts", exist_ok=True)
     with open("artifacts/wb-unmatched-skus.json", "w", encoding="utf-8") as file:
         json.dump(missing, file, ensure_ascii=False, indent=2)
+    candidates = []
+    keys = list(rrp)
+    for row in missing:
+        sku = row["sku"]
+        normalized = normalize_sku(sku)
+        scores = sorted(
+            ((difflib.SequenceMatcher(None, normalized, key).ratio(), key, rrp[key])
+             for key in keys), reverse=True
+        )[:6]
+        candidates.append({"sku": sku, "nm_id": row["nm_id"],
+                           "rrp_candidates": [
+                               {"key": key, "rrp": price, "similarity": round(score, 3)}
+                               for score, key, price in scores]})
+    with open("artifacts/wb-match-candidates.json", "w", encoding="utf-8") as file:
+        json.dump(candidates, file, ensure_ascii=False, indent=2)
     with open("artifacts/wb-price-summary.json", "w", encoding="utf-8") as file:
         json.dump({"total": len(items), "red": len(red), "yellow": len(yellow),
                    "no_rrp": len(missing), "no_price": len(unpriced)}, file, ensure_ascii=False, indent=2)
