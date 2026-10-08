@@ -1,4 +1,5 @@
 name: Ozon Profitability
+# rerun after accrual category fix
 
 on:
   push:
