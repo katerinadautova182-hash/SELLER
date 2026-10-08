@@ -59,13 +59,7 @@ jobs:
           PURCHASE_COST_MAP_B64: ${{ secrets.PURCHASE_COST_MAP_B64 }}
         run: python -m ozon_agent.unit_economics_live --snapshot artifacts/ozon_catalog.json
 
-      - name: Upload unit economics artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ozon-unit-economics
-          path: |
-            artifacts/unit_economics_live.json
-            artifacts/unit_economics_live.csv
-            artifacts/ozon_catalog.json
-          if-no-files-found: error
-          retention-days: 14
+      - name: Keep commercial report private
+        run: |
+          test -s artifacts/unit_economics_live.csv
+          echo "Unit economics calculated locally. Commercial files are not uploaded to public artifacts."
