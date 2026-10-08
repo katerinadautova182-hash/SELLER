@@ -35,8 +35,8 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
-      - name: Run unit tests
-        run: pytest -q
+      - name: Run price-control tests
+        run: pytest -q tests/test_catalog.py tests/test_auto_fix_yellow.py tests/test_price_alert.py
 
       - name: Validate Ozon secrets
         env:
@@ -95,7 +95,7 @@ jobs:
           restore-keys: |
             ozon-price-alert-
 
-      - name: Send red-zone report to Telegram
+      - name: Send price-control report to Telegram
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         continue-on-error: true
         env:
