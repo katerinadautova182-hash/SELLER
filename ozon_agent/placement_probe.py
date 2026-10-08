@@ -1,5 +1,6 @@
-"""Probe Ozon placement-by-products report for September 2026."""
-import csv,io,time,requests
+"""Probe Ozon placement-by-products XLSX report for September 2026."""
+import io,time,requests
+from openpyxl import load_workbook
 from ozon_export.client import OzonClient
 
 def main():
@@ -9,22 +10,29 @@ def main():
         "date_to":"2026-09-30"
     })
     code=created.get("code") or (created.get("result") or {}).get("code")
-    print("PLACEMENT create:",created)
+    print("PLACEMENT code:",code)
     if not code:
         raise SystemExit("No report code")
     for _ in range(30):
         info=client.post("/v1/report/info",{"code":code})
         result=info.get("result") or {}
         status=str(result.get("status") or "")
-        print("PLACEMENT status:",status)
-        file_url=result.get("file")
-        if file_url:
-            r=requests.get(file_url,timeout=60)
+        if result.get("file"):
+            r=requests.get(result["file"],timeout=60)
             r.raise_for_status()
-            raw=r.content.decode("utf-8-sig",errors="replace")
-            print("PLACEMENT lines:",len(raw.splitlines()))
-            print("\n".join(raw.splitlines()[:12]))
+            wb=load_workbook(io.BytesIO(r.content),read_only=True,data_only=True)
+            print("PLACEMENT sheets:",wb.sheetnames)
+            for ws in wb.worksheets:
+                print("PLACEMENT sheet:",ws.title)
+                rows=ws.iter_rows(values_only=True)
+                header=next(rows,None)
+                print("PLACEMENT header:",header)
+                for row in rows:
+                    textrow=" | ".join("" if v is None else str(v) for v in row)
+                    if "MS9500" in textrow or "496958132" in textrow:
+                        print("PLACEMENT MS9500:",row)
             return
+        print("PLACEMENT status:",status)
         time.sleep(2)
     raise SystemExit("Placement report timeout")
 
