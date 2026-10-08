@@ -1,0 +1,56 @@
+name: Ozon Finance September 2026 v2
+
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/ozon-finance-september-2026-v2.yml"
+
+jobs:
+  finance-september:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Run unit tests
+        env:
+          OZON_CLIENT_ID: test
+          OZON_API_KEY: test
+        run: pytest -q
+      - name: Build catalog snapshot
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+        run: python -m ozon_agent.live_snapshot --output artifacts/ozon_catalog.json
+      - name: Build September finance by SKU
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+        run: |
+          python -m ozon_agent.finance_by_sku \
+            --date-from "2026-09-01" \
+            --date-to "2026-09-30" \
+            --snapshot artifacts/ozon_catalog.json \
+            --output-dir artifacts/finance
+      - name: Upload finance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ozon-finance-september-2026-v2
+          path: artifacts/finance/
+          if-no-files-found: error
+          retention-days: 14
