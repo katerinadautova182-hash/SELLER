@@ -13,6 +13,9 @@ import urllib.parse
 import urllib.request
 from math import ceil
 
+from ozon_agent.catalog import normalize_sku
+from ozon_agent.business_rules import canonical_sku, is_clearance_sku, manual_rrp, box_rule
+
 API = "https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter"
 TG = "https://api.telegram.org/bot{}/sendMessage"
 
@@ -45,10 +48,6 @@ def fetch_catalog(token):
     raise RuntimeError("Exceeded catalog page safety limit")
 
 
-def normalize(value):
-    return "".join(str(value).upper().split())
-
-
 def load_rrp():
     raw = os.getenv("RRP_MAP_B64", "")
     if not raw:
@@ -56,7 +55,7 @@ def load_rrp():
     result = json.loads(base64.b64decode(raw).decode("utf-8"))
     if not isinstance(result, dict):
         raise ValueError("RRP_MAP_B64 must encode a JSON dictionary")
-    return {normalize(k): float(v) for k, v in result.items() if v not in (None, "")}
+    return {normalize_sku(k): float(v) for k, v in result.items() if v not in (None, "")}
 
 
 def analyze(items, rrp):
@@ -65,11 +64,25 @@ def analyze(items, rrp):
     for item in items:
         sku = str(item.get("vendorCode", "")).strip()
         nm_id = str(item.get("nmID", "")).strip()
-        if "УЦ" in normalize(sku):
+        if is_clearance_sku(sku):
             continue
-        reference = rrp.get(normalize(sku))
+        reference = manual_rrp(sku)
+        match_rule = "manual" if reference is not None else ""
         if reference is None:
-            missing.append(sku or nm_id)
+            box = box_rule(sku)
+            if box:
+                base_sku, multiplier = box
+                base = rrp.get(base_sku)
+                reference = base * multiplier if base is not None else None
+                if reference is not None:
+                    match_rule = "box"
+            else:
+                canonical = canonical_sku(sku)
+                reference = rrp.get(normalize_sku(canonical))
+                if reference is not None:
+                    match_rule = "alias" if normalize_sku(canonical) != normalize_sku(sku) else "direct"
+        if reference is None:
+            missing.append({"sku": sku, "nm_id": nm_id})
             continue
         sizes = item.get("sizes") or []
         for size in sizes:
@@ -79,7 +92,8 @@ def analyze(items, rrp):
                 continue
             price = float(price)
             entry = {"sku": sku, "nm_id": nm_id, "size": size.get("techSizeName", ""),
-                     "price": price, "rrp": reference, "floor": ceil(reference * 1.05)}
+                     "price": price, "rrp": reference, "floor": ceil(reference * 1.05),
+                     "rrp_match_rule": match_rule}
             if price < reference:
                 red.append(entry)
             elif price < entry["floor"]:
@@ -105,7 +119,7 @@ def format_report(items, red, yellow, missing, unpriced):
             if len(rows) > 30:
                 lines.append("... и ещё " + str(len(rows) - 30))
     if missing:
-        lines.extend(("", "Нет РРЦ для первых 15 SKU: " + ", ".join(missing[:15])))
+        lines.extend(("", "Нет РРЦ для первых 15 SKU: " + ", ".join(v["sku"] or v["nm_id"] for v in missing[:15])))
     return "\n".join(lines)
 
 
@@ -136,6 +150,8 @@ def main():
         report += "\n\nRRP_MAP_B64 is missing — threshold audit not performed."
     send_message(telegram, chat_id, report)
     os.makedirs("artifacts", exist_ok=True)
+    with open("artifacts/wb-unmatched-skus.json", "w", encoding="utf-8") as file:
+        json.dump(missing, file, ensure_ascii=False, indent=2)
     with open("artifacts/wb-price-summary.json", "w", encoding="utf-8") as file:
         json.dump({"total": len(items), "red": len(red), "yellow": len(yellow),
                    "no_rrp": len(missing), "no_price": len(unpriced)}, file, ensure_ascii=False, indent=2)
