@@ -127,6 +127,17 @@ def main():
               f"ret={x['returns_rub']:.2f} err={x['operational_errors_rub']:.2f} "
               f"promo={x['promotion_rub']:.2f} cogs={x['cogs_rub']:.2f} "
               f"profit={x['contribution_profit_rub']:.2f}")
+    for offer in ("2020C-B","MS101","PB74","MS8828 BLACK","MS9903R+ms101"):
+        r=next((x for x in rows if str(x.get("offer_id") or "").upper()==offer.upper()),None)
+        if r:
+            print(
+                "VALIDATION",offer,
+                f"units={r['delivered_units']:.0f}",
+                f"buyer={r['buyer_revenue_rub']:.2f}",
+                f"placement={r['placement_rub']:.2f}",
+                f"profit={r['contribution_profit_rub']:.2f}",
+                f"margin={r['contribution_margin_percent']:.2f}"
+            )
     send_summary(rows,args.date_from,args.date_to)
     return 0
 if __name__=="__main__":raise SystemExit(main())
