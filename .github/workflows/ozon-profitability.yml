@@ -1,4 +1,5 @@
 name: Ozon Profitability
+# placement validation
 # rerun after accrual category fix
 
 on:
