@@ -36,7 +36,7 @@ def build_catalog_sku_map(snapshot: dict) -> dict[str, dict]:
     out = {}
     for item in snapshot.get("items", []):
         offer_id = str(item.get("offer_id") or "").strip()
-        for sku in item.get("customer_price_skus") or []:
+        for sku in (item.get("all_skus") or item.get("customer_price_skus") or []):
             out[str(sku)] = {
                 "offer_id": offer_id,
                 "name": item.get("name") or "",
