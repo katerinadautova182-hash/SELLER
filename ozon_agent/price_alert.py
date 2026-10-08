@@ -1,7 +1,11 @@
-"""Send Telegram only when the set of real RRP violations changes.
+"""Telegram price control for Ozon.
 
-RRP data is supplied through RRP_MAP_B64 GitHub Secret.
-Clearance SKUs containing "УЦ" are intentionally ignored.
+Signals:
+- RED: customer price below RRP.
+- YELLOW: customer price between RRP and RRP+5% (auto-managed silently).
+- WHITE: anomalously high customer price versus this SKU's own recent history.
+
+Clearance and out-of-stock SKUs are ignored.
 """
 from __future__ import annotations
 
@@ -12,12 +16,15 @@ import json
 import os
 from math import ceil
 from pathlib import Path
+from statistics import median
 
 from .business_rules import is_clearance_sku, canonical_sku, manual_rrp, box_rule
 from .catalog import normalize_sku
 from .telegram import send_telegram
 
 RRP_FACTOR = 1.05
+PRICE_HISTORY_LIMIT = 28       # 7 days at the current 6-hour schedule
+PRICE_HISTORY_MIN_SAMPLES = 4  # about one day before WHITE can trigger
 
 
 def load_rrp_map() -> dict[str, float]:
@@ -90,27 +97,124 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
     return red, yellow, stats
 
 
-def fingerprint(red: list[dict], yellow: list[dict], stats: dict) -> str:
+def _high_price_rule(baseline: float) -> tuple[float, float]:
+    """Return (relative threshold, absolute threshold) for WHITE signal."""
+    if baseline <= 1500:
+        return 0.35, 300.0
+    if baseline <= 5000:
+        return 0.30, 500.0
+    if baseline <= 15000:
+        return 0.25, 1000.0
+    return 0.20, 2000.0
+
+
+def detect_high_price_anomalies(snapshot: dict, price_history: dict[str, list[float]]) -> list[dict]:
+    white = []
+    for item in snapshot.get("items", []):
+        offer_id = str(item.get("offer_id") or "").strip()
+        if not offer_id:
+            continue
+        if item.get("eligibility") in ("CLEARANCE", "OUT_OF_STOCK") or is_clearance_sku(offer_id):
+            continue
+        price = item.get("customer_price")
+        if not item.get("customer_price_verified") or price in (None, 0, 0.0):
+            continue
+
+        history = [
+            float(v) for v in (price_history.get(offer_id) or [])
+            if v not in (None, 0, 0.0)
+        ][-PRICE_HISTORY_LIMIT:]
+        if len(history) < PRICE_HISTORY_MIN_SAMPLES:
+            continue
+
+        baseline = float(median(history))
+        current = float(price)
+        rel_threshold, abs_threshold = _high_price_rule(baseline)
+        delta = current - baseline
+        delta_pct = (delta / baseline * 100.0) if baseline > 0 else 0.0
+
+        if current > baseline * (1.0 + rel_threshold) and delta > abs_threshold:
+            white.append({
+                "offer_id": offer_id,
+                "customer_price": current,
+                "baseline_price": round(baseline, 2),
+                "delta": round(delta, 2),
+                "delta_pct": round(delta_pct, 1),
+                "history_samples": len(history),
+            })
+
+    white.sort(key=lambda x: (-x["delta_pct"], -x["delta"], x["offer_id"]))
+    return white
+
+
+def update_price_history(snapshot: dict, price_history: dict[str, list[float]]) -> dict[str, list[float]]:
+    updated = {
+        str(k): [float(v) for v in (vals or []) if v not in (None, 0, 0.0)][-PRICE_HISTORY_LIMIT:]
+        for k, vals in (price_history or {}).items()
+    }
+    for item in snapshot.get("items", []):
+        offer_id = str(item.get("offer_id") or "").strip()
+        if not offer_id:
+            continue
+        if item.get("eligibility") in ("CLEARANCE", "OUT_OF_STOCK") or is_clearance_sku(offer_id):
+            continue
+        price = item.get("customer_price")
+        if not item.get("customer_price_verified") or price in (None, 0, 0.0):
+            continue
+        values = updated.setdefault(offer_id, [])
+        values.append(float(price))
+        updated[offer_id] = values[-PRICE_HISTORY_LIMIT:]
+    return updated
+
+
+def fingerprint(red: list[dict], yellow: list[dict], stats: dict, white: list[dict] | None = None) -> str:
+    white = white or []
     canonical = {
         "red": [[v["offer_id"], round(v["customer_price"], 2), round(v["rrp"], 2)] for v in red],
+        "white": [
+            [v["offer_id"], round(v["customer_price"], 2), round(v["baseline_price"], 2)]
+            for v in white
+        ],
     }
     return hashlib.sha256(
         json.dumps(canonical, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
 
 
-def format_message(red: list[dict], yellow: list[dict], stats: dict) -> str:
-    """Telegram report: only the RED zone. Yellow is auto-corrected silently."""
-    lines = ["Ozon — красная зона", f"🔴 Ниже РРЦ: {len(red)}"]
+def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list[dict] | None = None) -> str:
+    """Telegram report: RED RRP violations + WHITE high-price anomalies."""
+    white = white or []
+    lines = [
+        "Ozon — контроль цен",
+        f"🔴 Ниже РРЦ: {len(red)}",
+        f"⚪ Аномально высокая цена: {len(white)}",
+    ]
+
     if red:
         lines.append("")
+        lines.append("🔴 Ниже РРЦ")
         for v in red:
             p = f"{v['customer_price']:,.0f}".replace(",", " ")
             rrp = f"{v['rrp']:,.0f}".replace(",", " ")
             gap = f"{v['gap_to_rrp']:,.0f}".replace(",", " ")
             lines.append(f"• {v['offer_id']}: покупатель {p} ₽, РРЦ {rrp} ₽ → ниже на {gap} ₽")
-    else:
-        lines.append("Нарушений ниже РРЦ нет.")
+
+    if white:
+        lines.append("")
+        lines.append("⚪ Аномально высокая цена")
+        for v in white:
+            p = f"{v['customer_price']:,.0f}".replace(",", " ")
+            base = f"{v['baseline_price']:,.0f}".replace(",", " ")
+            delta = f"{v['delta']:,.0f}".replace(",", " ")
+            lines.append(
+                f"• {v['offer_id']}: {p} ₽; обычно ≈ {base} ₽ → "
+                f"+{delta} ₽ / +{v['delta_pct']:.1f}%"
+            )
+
+    if not red and not white:
+        lines.append("")
+        lines.append("Отклонений нет.")
+
     return "\n".join(lines)
 
 
@@ -128,10 +232,6 @@ def main() -> None:
     with open(args.snapshot, "r", encoding="utf-8") as f:
         snapshot = json.load(f)
 
-    red, yellow, stats = collect_violations(snapshot, rrp_map)
-    if stats.get("rrp_missing_offer_ids"):
-        print("RRP missing offer_ids: " + json.dumps(stats["rrp_missing_offer_ids"], ensure_ascii=False))
-    fp = fingerprint(red, yellow, stats)
     state_path = Path(args.state)
     previous = {}
     if state_path.exists():
@@ -140,26 +240,41 @@ def main() -> None:
         except Exception:
             previous = {}
 
-    previous_fp = previous.get("fingerprint")
-    previous_count = int(previous.get("count") or 0)
+    previous_history = previous.get("price_history") or {}
+
+    red, yellow, stats = collect_violations(snapshot, rrp_map)
+    white = detect_high_price_anomalies(snapshot, previous_history)
+    fp = fingerprint(red, yellow, stats, white)
+
+    updated_history = update_price_history(snapshot, previous_history)
 
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
-        json.dumps({"fingerprint": fp, "count": len(red) + len(yellow)}, ensure_ascii=False),
+        json.dumps({
+            "fingerprint": fp,
+            "count": len(red) + len(yellow) + len(white),
+            "price_history": updated_history,
+        }, ensure_ascii=False),
         encoding="utf-8",
     )
 
+    if stats.get("rrp_missing_offer_ids"):
+        print("RRP missing offer_ids: " + json.dumps(stats["rrp_missing_offer_ids"], ensure_ascii=False))
+
+    previous_fp = previous.get("fingerprint")
     scheduled_report = os.getenv("GITHUB_EVENT_NAME", "").strip() == "schedule"
     force_report = os.getenv("FORCE_RED_REPORT", "").strip().upper() == "YES"
 
     if not scheduled_report and not force_report and fp == previous_fp:
-        print(f"Red status unchanged (red={len(red)}); Telegram skipped.")
+        print(f"Price status unchanged (red={len(red)}; white={len(white)}); Telegram skipped.")
         return
 
-    msg = format_message(red, yellow, stats)
+    msg = format_message(red, yellow, stats, white)
     send_telegram(msg)
-    print(f"Sent red-zone report: red={len(red)}; yellow={len(yellow)} auto-managed silently.")
-
+    print(
+        f"Sent price report: red={len(red)}; white={len(white)}; "
+        f"yellow={len(yellow)} auto-managed silently."
+    )
 
 
 if __name__ == "__main__":
