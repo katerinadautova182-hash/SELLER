@@ -46,7 +46,11 @@ jobs:
           TELEGRAM_WB_BOT_TOKEN: ${{ secrets.TELEGRAM_WB_BOT_TOKEN }}
           TELEGRAM_WB_CHAT_ID: ${{ secrets.TELEGRAM_WB_CHAT_ID }}
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
-        run: python -m wb_agent.price_check
+          WB_MARKETPLACE_API_KEY: ${{ secrets.WB_MARKETPLACE_API_KEY }}
+          WB_CONTENT_API_KEY: ${{ secrets.WB_CONTENT_API_KEY }}
+        run: |
+          python -m compileall -q wb_agent
+          python -m wb_agent.price_check
       - uses: actions/upload-artifact@v4
         if: always()
         with:
