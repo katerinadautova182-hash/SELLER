@@ -145,8 +145,8 @@ def main():
     chat_id = os.environ["TELEGRAM_WB_CHAT_ID"].strip()
     items = fetch_catalog(wb)
     rrp = load_rrp()
-    stock_token = os.getenv("WB_MARKETPLACE_API_KEY", "").strip()
-    content_token = os.getenv("WB_CONTENT_API_KEY", "").strip()
+    stock_token = os.getenv("WB_MARKETPLACE_API_KEY", "").strip() or wb
+    content_token = os.getenv("WB_CONTENT_API_KEY", "").strip() or wb
     stock_status = "NOT_CONFIGURED"
     available = set()
     if stock_token and content_token:
@@ -174,12 +174,12 @@ def main():
              "Товаров в каталоге: " + str(len(items)),
              "Проверка остатков FBS: " + (
                  str(len(active_items)) + " товаров с остатком" if stock_status == "VERIFIED"
-                 else "не настроена (нет ключей WB Marketplace/Content)"),
+                 else "проверка недоступна"),
              "Конечная витринная цена: НЕ ПОЛУЧЕНА",
              "Достоверных сигналов нарушения РРЦ: нет данных",
              "Цены продавца / Клуба не подставляются вместо покупательской.",
              "Изменений цен: нет."]
-    send_telegram(telegram, chat_id, "\\n".join(lines))
+    send_message(telegram, chat_id, "\n".join(lines))
     print("WB monitoring:", json.dumps({
         "catalog": len(items), "stock_status": stock_status,
         "in_stock": len(active_items) if stock_status == "VERIFIED" else None,
