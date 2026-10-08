@@ -1,0 +1,1 @@
+"""Wildberries seller price monitoring."""
