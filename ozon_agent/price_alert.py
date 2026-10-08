@@ -187,6 +187,7 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list
     lines = [
         "Ozon — контроль цен",
         f"🔴 Ниже РРЦ: {len(red)}",
+        f"🟡 Осталось после автокоррекции: {len(yellow)}",
         f"⚪ Аномально высокая цена: {len(white)}",
     ]
 
@@ -198,6 +199,18 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list
             rrp = f"{v['rrp']:,.0f}".replace(",", " ")
             gap = f"{v['gap_to_rrp']:,.0f}".replace(",", " ")
             lines.append(f"• {v['offer_id']}: покупатель {p} ₽, РРЦ {rrp} ₽ → ниже на {gap} ₽")
+
+    if yellow:
+        lines.append("")
+        lines.append("🟡 Осталось после автокоррекции")
+        for v in yellow:
+            p = f"{v['customer_price']:,.0f}".replace(",", " ")
+            floor = f"{v['floor']:,.0f}".replace(",", " ")
+            gap = f"{v['gap_to_floor']:,.0f}".replace(",", " ")
+            lines.append(
+                f"• {v['offer_id']}: покупатель {p} ₽, минимум {floor} ₽ → "
+                f"не хватает {gap} ₽"
+            )
 
     if white:
         lines.append("")
