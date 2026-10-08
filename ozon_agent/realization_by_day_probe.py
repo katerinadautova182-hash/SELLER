@@ -8,7 +8,7 @@ TARGETS={"2020C-B","MS101","PB74","MS8828 BLACK","MS9903R+ms101","MS9500"}
 def main():
     c=OzonClient()
     agg=defaultdict(lambda:{"delivered":0.0,"returned":0.0,"buyer":0.0,"points":0.0,"partners":0.0,"base":0.0,"fee":0.0})
-    d=date(2026,9,1)
+    d=date(2026,9,7)
     while d<=date(2026,9,30):
         data=c.post("/v1/finance/realization/by-day",{"day":d.day,"month":d.month,"year":d.year})
         for row in data.get("rows") or []:
