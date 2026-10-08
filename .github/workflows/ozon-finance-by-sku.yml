@@ -1,6 +1,11 @@
 name: Ozon Finance by SKU
 
 on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/ozon-finance-by-sku.yml"
   workflow_dispatch:
     inputs:
       date_from:
@@ -11,6 +16,10 @@ on:
         description: "End date YYYY-MM-DD"
         required: true
         type: string
+
+env:
+  FINANCE_DATE_FROM: ${{ inputs.date_from || '2026-09-01' }}
+  FINANCE_DATE_TO: ${{ inputs.date_to || '2026-09-30' }}
 
 concurrency:
   group: ozon-finance-by-sku
