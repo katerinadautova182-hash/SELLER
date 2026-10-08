@@ -1,0 +1,102 @@
+name: Ozon Profitability
+
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/ozon-profitability.yml"
+  workflow_dispatch:
+    inputs:
+      date_from:
+        description: "Start date YYYY-MM-DD"
+        required: false
+        type: string
+      date_to:
+        description: "End date YYYY-MM-DD"
+        required: false
+        type: string
+
+env:
+  REPORT_DATE_FROM: ${{ inputs.date_from || '2026-09-01' }}
+  REPORT_DATE_TO: ${{ inputs.date_to || '2026-09-30' }}
+
+concurrency:
+  group: ozon-profitability
+  cancel-in-progress: false
+
+jobs:
+  profitability:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run unit tests
+        env:
+          OZON_CLIENT_ID: test
+          OZON_API_KEY: test
+        run: pytest -q
+
+      - name: Validate secrets
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+          PURCHASE_COST_MAP_B64: ${{ secrets.PURCHASE_COST_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          required=("OZON_CLIENT_ID","OZON_API_KEY","PURCHASE_COST_MAP_B64","TELEGRAM_BOT_TOKEN","TELEGRAM_CHAT_ID")
+          missing=[x for x in required if not os.getenv(x)]
+          if missing:
+              print("Missing secrets:", ", ".join(missing))
+              sys.exit(2)
+          print("Required secrets configured.")
+          PY
+
+      - name: Build catalog snapshot
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+        run: python -m ozon_agent.live_snapshot --output artifacts/ozon_catalog.json
+
+      - name: Build realized finance by SKU
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+        run: |
+          python -m ozon_agent.finance_by_sku             --date-from "${{ env.REPORT_DATE_FROM }}"             --date-to "${{ env.REPORT_DATE_TO }}"             --snapshot artifacts/ozon_catalog.json             --output-dir artifacts/finance
+
+      - name: Calculate profitability and send privately
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+          PURCHASE_COST_MAP_B64: ${{ secrets.PURCHASE_COST_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ALLOW_LEGACY_COSTS: "YES"
+        run: |
+          python -m ozon_agent.profitability_period             --date-from "${{ env.REPORT_DATE_FROM }}"             --date-to "${{ env.REPORT_DATE_TO }}"             --finance artifacts/finance/finance_by_sku.json             --finance-summary artifacts/finance/finance_summary.json             --output artifacts/private/ozon_profitability.csv
+
+      - name: Confirm private report generated
+        run: |
+          test -s artifacts/private/ozon_profitability.csv
+          echo "Private profitability report generated and delivered to Telegram."
