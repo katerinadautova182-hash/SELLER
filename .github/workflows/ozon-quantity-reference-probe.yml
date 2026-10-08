@@ -1,4 +1,5 @@
 name: Ozon Quantity Reference Probe
+# fixed mapping
 on:
   push:
     branches:
