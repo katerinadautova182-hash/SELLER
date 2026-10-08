@@ -18,6 +18,7 @@ from ozon_agent.catalog import normalize_sku
 from ozon_agent.business_rules import canonical_sku, is_clearance_sku, manual_rrp, box_rule
 from .sku_aliases import WB_RRP_ALIASES
 from .fbs import available_nmids
+from .order_prices import fetch_recent_orders, latest_observations
 
 API = "https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter"
 TG = "https://api.telegram.org/bot{}/sendMessage"
@@ -155,9 +156,43 @@ def main():
         stock_status = "VERIFIED"
     active_items = [item for item in items if str(item.get("nmID", "")) in available]
     red, yellow, missing, unpriced = analyze(active_items, rrp)
+    orders = fetch_recent_orders(wb, days=7)
+    observations = latest_observations(orders, available)
+    reference_by_nm = {}
+    for row in active_items:
+        nm = str(row.get("nmID", ""))
+        sku = str(row.get("vendorCode", "")).strip()
+        if is_clearance_sku(sku):
+            continue
+        reference = manual_rrp(sku)
+        if reference is None:
+            box = box_rule(sku)
+            if box:
+                base, multiplier = box
+                reference = rrp.get(base)
+                reference = reference * multiplier if reference is not None else None
+            else:
+                canonical = WB_RRP_ALIASES.get(normalize_sku(sku), canonical_sku(sku))
+                reference = rrp.get(normalize_sku(canonical))
+        if reference is not None:
+            reference_by_nm[nm] = {"sku": sku, "rrp": reference}
+    historical_red, historical_yellow = [], []
+    for nm, obs in observations.items():
+        match = reference_by_nm.get(nm)
+        if match is None:
+            continue
+        price = obs["buyer_order_price_excl_wallet"]
+        entry = dict(obs, **match, floor=ceil(match["rrp"] * 1.05))
+        if price < match["rrp"]:
+            historical_red.append(entry)
+        elif price < entry["floor"]:
+            historical_yellow.append(entry)
+
     os.makedirs("artifacts", exist_ok=True)
     with open("artifacts/wb-unmatched-skus.json", "w", encoding="utf-8") as file:
         json.dump(missing, file, ensure_ascii=False, indent=2)
+    with open("artifacts/wb-order-observations.json", "w", encoding="utf-8") as file:
+        json.dump(list(observations.values()), file, ensure_ascii=False, indent=2)
     with open("artifacts/wb-price-summary.json", "w", encoding="utf-8") as file:
         json.dump({
             "market_region": "Москва",
@@ -168,6 +203,10 @@ def main():
             "verified_buyer_prices": 0,
             "buyer_price_status": "UNAVAILABLE_NO_AUTHORIZED_SOURCE",
             "rrp_violations_confirmed": 0,
+            "historical_orders_last_7_days": len(orders),
+            "in_stock_products_with_order_price": len(observations),
+            "historical_below_rrp": len(historical_red),
+            "historical_below_rrp_plus_5": len(historical_yellow),
             "pricing_changes": False
         }, file, ensure_ascii=False, indent=2)
     lines = ["WB — контроль конечной цены покупателя, Москва",
@@ -175,10 +214,24 @@ def main():
              "Проверка остатков FBS: " + (
                  str(len(active_items)) + " товаров с остатком" if stock_status == "VERIFIED"
                  else "проверка недоступна"),
+             "Заказы за 7 дней: " + str(len(orders)),
+             "Товаров с остатком и ценой заказа: " + str(len(observations)),
+             "По заказам ниже РРЦ: " + str(len(historical_red)),
+             "По заказам ниже РРЦ+5%: " + str(len(historical_yellow)),
+             "ВНИМАНИЕ: это исторические цены заказов, не текущая московская витрина.",
+             "finishedPrice без отдельной скидки WB Кошелька.",
              "Конечная витринная цена: НЕ ПОЛУЧЕНА",
              "Достоверных сигналов нарушения РРЦ: нет данных",
              "Цены продавца / Клуба не подставляются вместо покупательской.",
              "Изменений цен: нет."]
+    for heading, subset in (("Ниже РРЦ (по заказам)", historical_red),
+                            ("Ниже РРЦ+5% (по заказам)", historical_yellow)):
+        if subset:
+            lines.extend(("", heading))
+            for entry in sorted(subset, key=lambda v: v["order_date"], reverse=True)[:20]:
+                lines.append("{} WB {}: {} ₽, РРЦ {} ₽, цель {} ₽, заказ {}".format(
+                    entry["sku"], entry["nm_id"], entry["buyer_order_price_excl_wallet"],
+                    entry["rrp"], entry["floor"], entry["order_date"][:16]))
     send_message(telegram, chat_id, "\n".join(lines))
     print("WB monitoring:", json.dumps({
         "catalog": len(items), "stock_status": stock_status,
