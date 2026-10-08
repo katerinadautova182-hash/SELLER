@@ -1,4 +1,4 @@
-name: Ozon Margin Check
+name: Ozon Price Check
 
 on:
   workflow_dispatch:
@@ -57,12 +57,6 @@ jobs:
           OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
           OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
         run: python -m ozon_agent.smoke_test
-
-      - name: Ozon finance accrual smoke test
-        env:
-          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
-          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
-        run: python -m ozon_agent.finance_smoke
 
       - name: Build live Ozon catalog snapshot
         env:
