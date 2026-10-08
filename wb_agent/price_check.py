@@ -17,6 +17,7 @@ from math import ceil
 from ozon_agent.catalog import normalize_sku
 from ozon_agent.business_rules import canonical_sku, is_clearance_sku, manual_rrp, box_rule
 from .sku_aliases import WB_RRP_ALIASES
+from .fbs import available_nmids
 
 API = "https://discounts-prices-api.wildberries.ru/api/v2/list/goods/filter"
 TG = "https://api.telegram.org/bot{}/sendMessage"
@@ -144,34 +145,46 @@ def main():
     chat_id = os.environ["TELEGRAM_WB_CHAT_ID"].strip()
     items = fetch_catalog(wb)
     rrp = load_rrp()
-    red, yellow, missing, unpriced = analyze(items, rrp)
-    report = format_report(items, red, yellow, missing, unpriced)
-    print("WB catalog rows:", len(items), "RRP mapped:", len(rrp),
-          "red:", len(red), "yellow:", len(yellow), "unmapped:", len(missing))
-    if not rrp:
-        report += "\n\nRRP_MAP_B64 is missing — threshold audit not performed."
-    send_message(telegram, chat_id, report)
+    stock_token = os.getenv("WB_MARKETPLACE_API_KEY", "").strip()
+    content_token = os.getenv("WB_CONTENT_API_KEY", "").strip()
+    stock_status = "NOT_CONFIGURED"
+    available = set()
+    if stock_token and content_token:
+        # Fail closed if inventory lookup breaks: NEVER report a price violation.
+        available = available_nmids(stock_token, content_token)
+        stock_status = "VERIFIED"
+    active_items = [item for item in items if str(item.get("nmID", "")) in available]
+    red, yellow, missing, unpriced = analyze(active_items, rrp)
     os.makedirs("artifacts", exist_ok=True)
     with open("artifacts/wb-unmatched-skus.json", "w", encoding="utf-8") as file:
         json.dump(missing, file, ensure_ascii=False, indent=2)
-    candidates = []
-    keys = list(rrp)
-    for row in missing:
-        sku = row["sku"]
-        normalized = normalize_sku(sku)
-        scores = sorted(
-            ((difflib.SequenceMatcher(None, normalized, key).ratio(), key, rrp[key])
-             for key in keys), reverse=True
-        )[:6]
-        candidates.append({"sku": sku, "nm_id": row["nm_id"],
-                           "rrp_candidates": [
-                               {"key": key, "rrp": price, "similarity": round(score, 3)}
-                               for score, key, price in scores]})
-    with open("artifacts/wb-match-candidates.json", "w", encoding="utf-8") as file:
-        json.dump(candidates, file, ensure_ascii=False, indent=2)
     with open("artifacts/wb-price-summary.json", "w", encoding="utf-8") as file:
-        json.dump({"total": len(items), "club_below_rrp": len(red), "club_below_floor": len(yellow), "wallet_price_verified": False,
-                   "no_rrp": len(missing), "no_price": len(unpriced)}, file, ensure_ascii=False, indent=2)
+        json.dump({
+            "market_region": "Москва",
+            "stock_status": stock_status,
+            "total_catalog": len(items),
+            "positive_fbs_stock": len(active_items) if stock_status == "VERIFIED" else None,
+            "unmatched_on_stock": len(missing) if stock_status == "VERIFIED" else None,
+            "verified_buyer_prices": 0,
+            "buyer_price_status": "UNAVAILABLE_NO_AUTHORIZED_SOURCE",
+            "rrp_violations_confirmed": 0,
+            "pricing_changes": False
+        }, file, ensure_ascii=False, indent=2)
+    lines = ["WB — контроль конечной цены покупателя, Москва",
+             "Товаров в каталоге: " + str(len(items)),
+             "Проверка остатков FBS: " + (
+                 str(len(active_items)) + " товаров с остатком" if stock_status == "VERIFIED"
+                 else "не настроена (нет ключей WB Marketplace/Content)"),
+             "Конечная витринная цена: НЕ ПОЛУЧЕНА",
+             "Достоверных сигналов нарушения РРЦ: нет данных",
+             "Цены продавца / Клуба не подставляются вместо покупательской.",
+             "Изменений цен: нет."]
+    send_telegram(telegram, chat_id, "\\n".join(lines))
+    print("WB monitoring:", json.dumps({
+        "catalog": len(items), "stock_status": stock_status,
+        "in_stock": len(active_items) if stock_status == "VERIFIED" else None,
+        "buyer_price_source": "NOT_CONNECTED", "buyer_prices_verified": 0
+    }, ensure_ascii=False))
 
 
 if __name__ == "__main__":
