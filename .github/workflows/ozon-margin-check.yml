@@ -2,9 +2,6 @@ name: Ozon Price Check
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - claude/ozon-seller-product-export-nubra0
   schedule:
     - cron: "17 */6 * * *"
 
