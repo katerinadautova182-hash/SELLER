@@ -14,6 +14,10 @@ SKU_ALIASES = {
 
 MANUAL_PURCHASE_COSTS = {
     normalize_sku("Ghost2"): 6848.14,
+    # Confirmed by the owner; kept separate to prevent legacy alias collisions.
+    normalize_sku("304"): 1240.00,
+    normalize_sku("J304"): 159.00,
+    normalize_sku("203"): 825.00,
 }
 
 BOX_MULTIPLIERS = {
