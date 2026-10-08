@@ -10,6 +10,12 @@ def main():
     print(f"Finance accrual API OK for {day}. Accrual rows: {len(rows)}")
     if rows:
         print("Finance sample keys:", sorted(rows[0].keys()))
+        for acc in rows:
+            products=((acc.get("posting") or {}).get("products") or [])
+            if products:
+                print("Finance product sample keys:", sorted(products[0].keys()))
+                print("Finance product quantity sample:", products[0].get("quantity"))
+                break
 
 if __name__=="__main__":
     main()
