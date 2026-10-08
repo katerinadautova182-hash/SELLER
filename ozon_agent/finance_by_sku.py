@@ -13,7 +13,6 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from ozon_export.client import OzonClient
 from .finance_accruals import (
     fetch_accrual_types,
     fetch_accruals_for_day,
@@ -149,6 +148,8 @@ def write_csv(path: Path, rows: list[dict], fields: list[str]):
 
 
 def main() -> int:
+    from ozon_export.client import OzonClient
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--date-from", required=True)
     ap.add_argument("--date-to", required=True)
