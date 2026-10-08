@@ -2,29 +2,33 @@ import os
 os.environ.setdefault("OZON_CLIENT_ID","test")
 os.environ.setdefault("OZON_API_KEY","test")
 
-from ozon_agent.profitability_period import build_profitability, build_summary
+from ozon_agent.profitability_period import build_profitability
 
-
-def test_profitability_uses_net_units_and_135_cost():
-    finance=[{
-        "ozon_sku":"1","offer_id":"A","name":"A",
-        "seller_price_rub":1000,
-        "sale_commission_rub":-200,
-        "delivery_rub":-50,
-        "item_fees_rub":-20,
-        "item_compensation_rub":0,
-        "direct_finance_net_rub":730,
-    }]
-    qty={"1":{"delivered_units":2,"returned_units":1,"net_units":1}}
-    costs={"A":{"cost":400.0,"source":"owner","verified":True}}
-    rows=build_profitability(finance,qty,costs)
+def test_profitability_uses_ozon_economy_model():
+    realization={"1":{
+        "offer_id":"A","name":"A","delivered_units":2,
+        "buyer_revenue_rub":1000,
+        "ozon_discount_points_rub":300,
+        "partner_programs_rub":20,
+        "economic_sales_base_rub":1320,
+        "ozon_sales_fee_rub":500,
+        "posting_numbers":["P1"],
+    }}
+    costs={"1":{
+        "acquiring_rub":-20,
+        "shipment_processing_rub":-10,
+        "logistics_rub":-50,
+        "last_mile_rub":-20,
+        "placement_rub":0,
+        "returns_rub":0,
+        "operational_errors_rub":0,
+        "promotion_rub":-30,
+    }}
+    cost_map={"A":{"cost":200.0,"source":"owner","verified":True}}
+    rows=build_profitability(realization,costs,cost_map)
     r=rows[0]
-    assert r["landed_unit_cost_rub"] == 540
+    assert r["landed_unit_cost_rub"] == 270
     assert r["cogs_rub"] == 540
-    assert r["contribution_profit_rub"] == 190
-    assert r["contribution_margin_percent"] == 19
-    assert r["status"] == "YELLOW"
-
-    s=build_summary(rows,-50)
-    assert s["sku_contribution_profit_rub"] == 190
-    assert s["platform_contribution_after_non_item_rub"] == 140
+    # Ozon costs = 500 + 20 + 10 + 50 + 20 + 30 = 630
+    assert r["ozon_costs_total_rub"] == 630
+    assert r["contribution_profit_rub"] == 150
