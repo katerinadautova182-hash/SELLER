@@ -1,0 +1,56 @@
+name: WB Price Check (Read Only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/wb-price-check.yml"
+      - "wb_agent/**"
+
+concurrency:
+  group: wb-price-check
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check required secrets
+        env:
+          WB_API_KEY: ${{ secrets.WB_API_KEY }}
+          TELEGRAM_WB_BOT_TOKEN: ${{ secrets.TELEGRAM_WB_BOT_TOKEN }}
+          TELEGRAM_WB_CHAT_ID: ${{ secrets.TELEGRAM_WB_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          keys = ["WB_API_KEY", "TELEGRAM_WB_BOT_TOKEN", "TELEGRAM_WB_CHAT_ID"]
+          absent = [k for k in keys if not os.getenv(k)]
+          if absent:
+              print("Missing secrets: " + ", ".join(absent))
+              sys.exit(2)
+          print("Required secrets are set (values hidden).")
+          PY
+      - name: Read WB seller prices and send Telegram audit
+        env:
+          WB_API_KEY: ${{ secrets.WB_API_KEY }}
+          TELEGRAM_WB_BOT_TOKEN: ${{ secrets.TELEGRAM_WB_BOT_TOKEN }}
+          TELEGRAM_WB_CHAT_ID: ${{ secrets.TELEGRAM_WB_CHAT_ID }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+        run: python -m wb_agent.price_check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wb-price-audit
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
