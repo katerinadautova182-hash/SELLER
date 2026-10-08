@@ -1,0 +1,32 @@
+name: WB Free Browser Control Test
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - "wb_agent/browser_control_test.py"
+      - ".github/workflows/wb-browser-control-test.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Read Russian WB cards (Moscow browser context)
+        run: python -m wb_agent.browser_control_test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wb-free-browser-controls
+          path: artifacts/wb-browser-controls.json
+          retention-days: 7
+          if-no-files-found: ignore
