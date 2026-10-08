@@ -138,6 +138,9 @@ def main():
                 f"profit={r['contribution_profit_rub']:.2f}",
                 f"margin={r['contribution_margin_percent']:.2f}"
             )
-    send_summary(rows,args.date_from,args.date_to)
+    if os.getenv("SEND_PROFITABILITY_TELEGRAM","").upper() in {"YES","TRUE","1"}:
+        send_summary(rows,args.date_from,args.date_to)
+    else:
+        print("Profitability Telegram disabled until official Economy source is used.")
     return 0
 if __name__=="__main__":raise SystemExit(main())
