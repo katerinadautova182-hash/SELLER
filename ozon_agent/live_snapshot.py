@@ -160,7 +160,14 @@ def main() -> int:
                     for s in skus_by_product.get(pid, [])
                     if s in customer_by_sku
                 ]
+                seller_promo_prices = [
+                    customer_by_sku[s]["seller_promo_price"]
+                    for s in skus_by_product.get(pid, [])
+                    if s in customer_by_sku
+                    and float(customer_by_sku[s].get("seller_promo_price") or 0) > 0
+                ]
                 row["customer_price"] = min(candidate_prices) if candidate_prices else None
+                row["seller_promo_price"] = min(seller_promo_prices) if seller_promo_prices else None
                 row["customer_price_verified"] = bool(candidate_prices)
                 row["customer_price_skus"] = [
                     s for s in skus_by_product.get(pid, []) if s in customer_by_sku
