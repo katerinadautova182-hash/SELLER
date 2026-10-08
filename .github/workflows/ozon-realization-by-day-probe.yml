@@ -1,4 +1,5 @@
 name: Ozon Realization By Day Probe
+# September available window
 on:
   push:
     branches:
