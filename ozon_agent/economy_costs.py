@@ -1,5 +1,7 @@
 from collections import defaultdict
 from datetime import datetime,timedelta
+import io,time,requests
+from openpyxl import load_workbook
 from .finance_accruals import fetch_accruals_for_day,money
 T_ACQ=1;T_PROMO=3;T_PROC=17;T_LAST=29;T_LOG=32;T_RET=59;T_HAND=98;T_ERR=94
 RETURN_TYPES={59,45}
@@ -16,6 +18,32 @@ def services(acc):
    try: tid=int(s.get("type_id"))
    except Exception: continue
    if sku: yield sku,tid,money(s.get("accrued"))
+
+def placement_costs(client,a,b):
+ created=client.post("/v1/report/placement/by-products/create",{"date_from":a,"date_to":b})
+ code=created.get("code") or (created.get("result") or {}).get("code")
+ if not code: return {}
+ for _ in range(30):
+  info=client.post("/v1/report/info",{"code":code})
+  result=info.get("result") or {}
+  url=result.get("file")
+  if url:
+   r=requests.get(url,timeout=60);r.raise_for_status()
+   wb=load_workbook(io.BytesIO(r.content),read_only=True,data_only=True)
+   out=defaultdict(float)
+   for ws in wb.worksheets:
+    rows=ws.iter_rows(values_only=True);header=next(rows,None)
+    if not header: continue
+    cols={str(v).strip():i for i,v in enumerate(header) if v is not None}
+    sku_i=cols.get("SKU"); cost_i=cols.get("Начисленная стоимость размещения")
+    if sku_i is None or cost_i is None: continue
+    for row in rows:
+     if sku_i>=len(row) or cost_i>=len(row): continue
+     sku=str(row[sku_i] or "").strip()
+     if sku: out[sku]-=float(row[cost_i] or 0)
+   return {k:round(v,2) for k,v in out.items()}
+  time.sleep(2)
+ return {}
 
 def economy_costs(client,a,b,realization):
  accr=[]
@@ -53,4 +81,8 @@ def economy_costs(client,a,b,realization):
    if tid==T_ERR:
     for sku,posts in eligible.items():
      if unit in posts: out[sku]["operational_errors_rub"]+=money(f.get("accrued"))
+ placement=placement_costs(client,a,b)
+ for sku,amount in placement.items():
+  if sku in realization:
+   out[sku]["placement_rub"]=amount
  return {sku:{k:round(v,2) for k,v in row.items()} for sku,row in out.items()}
