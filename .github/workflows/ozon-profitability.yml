@@ -79,13 +79,6 @@ jobs:
           OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
         run: python -m ozon_agent.live_snapshot --output artifacts/ozon_catalog.json
 
-      - name: Build realized finance by SKU
-        env:
-          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
-          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
-        run: |
-          python -m ozon_agent.finance_by_sku             --date-from "${{ env.REPORT_DATE_FROM }}"             --date-to "${{ env.REPORT_DATE_TO }}"             --snapshot artifacts/ozon_catalog.json             --output-dir artifacts/finance
-
       - name: Calculate profitability and send privately
         env:
           OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
@@ -95,7 +88,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ALLOW_LEGACY_COSTS: "YES"
         run: |
-          python -m ozon_agent.profitability_period             --date-from "${{ env.REPORT_DATE_FROM }}"             --date-to "${{ env.REPORT_DATE_TO }}"             --finance artifacts/finance/finance_by_sku.json             --finance-summary artifacts/finance/finance_summary.json             --output artifacts/private/ozon_profitability.csv
+          python -m ozon_agent.profitability_period \
+            --date-from "${{ env.REPORT_DATE_FROM }}" \
+            --date-to "${{ env.REPORT_DATE_TO }}" \
+            --output artifacts/private/ozon_profitability.csv
 
       - name: Confirm private report generated
         run: |
