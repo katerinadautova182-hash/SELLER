@@ -20,7 +20,6 @@ from .price_check import _catalog, classify, load_rrp, resolve_rrp
 from ozon_agent.business_rules import is_clearance_sku
 from ozon_agent.telegram import send_telegram
 
-MAX_RELATIVE_RISE = 0.15
 MAX_TOTAL = 40
 
 
@@ -54,9 +53,6 @@ def candidates(items, rrp_map):
                "seller_before": seller, "seller_after": new_value,
                "rrp": rrp, "minimum": minimum, "delta": new_value - seller,
                "rrp_source": source}
-        if (new_value - seller) > seller * MAX_RELATIVE_RISE:
-            skipped.append({**row, "reason": "RISE_EXCEEDS_15_PERCENT"})
-            continue
         planned.append(row)
     if len(planned) > MAX_TOTAL:
         raise RuntimeError("Unexpectedly large one-shot repricing batch")
