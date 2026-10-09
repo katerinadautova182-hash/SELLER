@@ -1,5 +1,5 @@
 name: Yandex scheduled price correction and anomaly alerts
-# Manual one-off launch of the same scheduled workflow, 2026-10-09.
+# One ordinary cycle: red exact RRP gap; yellow seller +3%; verify buyer prices.
 
 on:
   workflow_dispatch:
