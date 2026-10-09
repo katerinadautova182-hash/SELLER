@@ -6,6 +6,7 @@ three write rounds. Always re-fetch official report between rounds.
 """
 from __future__ import annotations
 import json
+import argparse
 import os
 import time
 from pathlib import Path
@@ -37,6 +38,9 @@ def eligible(planned, baseline, previous_observation):
 
 
 def run():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--zone", choices=("red", "yellow"), required=True)
+    zone = parser.parse_args().zone
     if os.getenv("YANDEX_REPEAT_APPROVED") != "YES":
         raise RuntimeError("Explicit authorization missing")
     client = YandexMarketClient()
@@ -48,13 +52,16 @@ def run():
     business_id = ids[0]
     path = Path("artifacts/yandex-repeat-control.json")
     path.parent.mkdir(parents=True, exist_ok=True)
-    state = {"business_id":business_id,"rounds":[],"stops":[]}
+    state = {"business_id":business_id,"zone":zone,"rounds":[],"stops":[]}
     baseline = {}
     previous = {}
     # First report is fresh: do not rely on previous run's potentially stale prices.
-    for round_num in range(1, MAX_ROUNDS+1):
+    max_rounds = MAX_ROUNDS if zone == "red" else 1
+    for round_num in range(1, max_rounds+1):
         observed = obtain_report(client, business_id)
         planned, skipped = candidates(observed, rrp_map)
+        # Strict separation: scheduled execution may NEVER modify RED products.
+        planned = [r for r in planned if r["status"] == zone.upper()]
         for row in planned:
             baseline.setdefault(row["sku"], row["seller_before"])
         approved, held = eligible(planned, baseline, previous)
@@ -86,7 +93,7 @@ def run():
             final_items.append({"sku":sku,"buyer":buyer,"minimum":minimum,"status":status})
     state["final_violations"]=final_items
     path.write_text(json.dumps(state,ensure_ascii=False,indent=2))
-    lines=["Яндекс — повторная корректировка",
+    lines=[f"Яндекс — корректировка {zone.upper()}",
            f"Раундов: {len(state['rounds'])}; осталось нарушений: {len(final_items)}",
            f"Пропусков по ограничениям: {len(state['stops'])}"]
     for x in final_items:
