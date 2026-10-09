@@ -1,0 +1,29 @@
+name: Yandex pricing safety tests
+
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - '.github/workflows/yandex-pricing-safety-tests.yml'
+      - 'yandex_agent/repeat_reprice.py'
+      - 'yandex_agent/one_shot_reprice.py'
+      - 'tests/test_yandex_repeat.py'
+      - 'tests/test_yandex_one_shot.py'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+      - run: python -m pytest -q tests/test_yandex_repeat.py tests/test_yandex_one_shot.py
