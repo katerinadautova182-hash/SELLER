@@ -2,6 +2,11 @@ name: Yandex scheduled price correction and anomaly alerts
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - '.github/workflows/yandex-scheduled-control.yml'
   schedule:
     - cron: "55 */6 * * *"
 
@@ -14,6 +19,7 @@ concurrency:
 
 jobs:
   correct-and-check:
+    if: ${{ github.event_name != 'push' || (github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Run Yandex price control now')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
