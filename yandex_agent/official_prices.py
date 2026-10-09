@@ -71,10 +71,23 @@ def extract_report(content: bytes) -> list[dict]:
 
 
 def obtain_report(client: YandexMarketClient, business_id: int) -> list[dict]:
-    response = client.request(
-        "POST", "/v2/reports/goods-prices/generate",
-        params={"format": "JSON"}, payload={"businessId": business_id},
-    )
+    # Yandex enforces one report generation per business every two minutes.
+    # HTTP 420 is a quota throttle (not authentication failure). Wait only
+    # for this specific endpoint and retry once, rather than spamming requests.
+    try:
+        response = client.request(
+            "POST", "/v2/reports/goods-prices/generate",
+            params={"format": "JSON"}, payload={"businessId": business_id},
+        )
+    except RuntimeError as exc:
+        if "HTTP 420" not in str(exc) or "rate limit" not in str(exc).lower():
+            raise
+        print("Yandex report rate limit: waiting 125 seconds before retry")
+        time.sleep(125)
+        response = client.request(
+            "POST", "/v2/reports/goods-prices/generate",
+            params={"format": "JSON"}, payload={"businessId": business_id},
+        )
     result = response.get("result") or {}
     report_id = result.get("reportId")
     if not report_id:
