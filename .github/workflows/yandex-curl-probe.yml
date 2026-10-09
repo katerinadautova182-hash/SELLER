@@ -28,6 +28,7 @@ jobs:
       - name: Try five storefront cards (read only)
         env:
           YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
+          YANDEX_MARKET_COOKIES_JSON: ${{ secrets.YANDEX_MARKET_COOKIES_JSON }}
           PYTHONPATH: ${{ github.workspace }}
         run: python -m yandex_agent.curl_probe --max-products 5
       - name: Save response diagnostics
