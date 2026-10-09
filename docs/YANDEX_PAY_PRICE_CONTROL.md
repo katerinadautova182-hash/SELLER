@@ -34,8 +34,8 @@
 
 - `YANDEX_MARKET_API_KEY`
 - `RRP_MAP_B64` (тот же справочник РРЦ, который используется Ozon/WB)
-- `TELEGRAM_YANDEX_BOT_TOKEN`
-- `TELEGRAM_YANDEX_CHAT_ID`
+- `TELEGRAM_BOT_TOKEN` (используется существующий Ozon-бот)
+- `TELEGRAM_CHAT_ID` (используется существующий Ozon-чат)
 
 Для токена Яндекс Маркета достаточно доступа к просмотру товаров и карточек
 (`offers-and-cards-management:read-only`). Метод списка магазинов доступен с
