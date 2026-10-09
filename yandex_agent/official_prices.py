@@ -21,6 +21,7 @@ from .client import YandexMarketClient
 from .price_check import _catalog, classify, load_rrp, resolve_rrp
 from ozon_agent.business_rules import is_clearance_sku
 from ozon_agent.telegram import send_telegram
+from .reporting import format_alerts, suggest_rrp
 
 
 def number(value):
@@ -105,6 +106,7 @@ def run() -> int:
         raise RuntimeError("RRP_MAP_B64 missing")
     client = YandexMarketClient()
     mappings, _, _ = _catalog(client)
+    catalog_names = {(r["business_id"], str((r.get("offer") or {}).get("offerId") or "").strip()): str((r.get("offer") or {}).get("name") or "") for r in mappings}
     business_ids = sorted({row["business_id"] for row in mappings})
     results = []
     for business_id in business_ids:
@@ -116,11 +118,13 @@ def run() -> int:
             buyer_price = number(item.get("onDisplay") if "onDisplay" in item else item.get("ON_DISPLAY"))
             rrp, rule = resolve_rrp(offer_id, rrp_map)
             row = {"business_id": business_id, "offer_id": offer_id,
-                   "display_price": buyer_price, "rrp": rrp, "rrp_rule": rule}
+                   "display_price": buyer_price, "rrp": rrp, "rrp_rule": rule,
+                   "name": catalog_names.get((business_id, offer_id), "")}
             if buyer_price is None:
                 row["status"] = "PRICE_NOT_NUMERIC"
             elif rrp is None:
                 row["status"] = "MISSING_RRP"
+                row["rrp_suggestions"] = suggest_rrp(offer_id, rrp_map)
             else:
                 row["status"], row["target_price"] = classify(buyer_price, rrp)
             results.append(row)
@@ -134,18 +138,18 @@ def run() -> int:
     path.write_text(json.dumps({"source": "official_yandex_goods_prices_report",
                                 "stats": stats, "items": results},
                                ensure_ascii=False, indent=2), encoding="utf-8")
-    lines = ["Яндекс Маркет — официальный отчёт «Цены»",
-             "Источник: onDisplay / «На витрине»",
-             f"Товаров: {stats['total']}; проверено по РРЦ: {verified}",
-             f"Ниже РРЦ: {stats['RED']}; РРЦ…+5%: {stats['YELLOW']}; OK: {stats['OK']}",
-             f"Цена отсутствует/нечисловая: {stats['PRICE_NOT_NUMERIC']}; нет РРЦ: {stats['MISSING_RRP']}"]
-    for row in [x for x in results if x["status"] in ("RED", "YELLOW")][:25]:
-        lines.append(f"{row['offer_id']}: {row['display_price']:g} ₽ / РРЦ {row['rrp']:g} ₽ [{row['status']}]")
-    if verified == 0:
-        lines.append("ОШИБКА: нет подтверждённых цен «На витрине».")
-    message = "\n".join(lines)
-    print(message)
-    send_telegram(message)
+    missing = [r for r in results if r["status"] == "MISSING_RRP"]
+    if missing:
+        print("SKU MATCHING NEEDED (not sent to Telegram):")
+        for row in sorted(missing, key=lambda r: r["offer_id"]):
+            print(json.dumps({
+                "offer_id": row["offer_id"],
+                "name": row.get("name"),
+                "candidates": row.get("rrp_suggestions", []),
+            }, ensure_ascii=False))
+    for message in format_alerts(results, stats):
+        print(message)
+        send_telegram(message)
     return 0 if verified else 2
 
 

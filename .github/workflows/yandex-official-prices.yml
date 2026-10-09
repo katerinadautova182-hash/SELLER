@@ -7,6 +7,8 @@ on:
       - claude/ozon-seller-product-export-nubra0
     paths:
       - '.github/workflows/yandex-official-prices.yml'
+      - 'yandex_agent/official_prices.py'
+      - 'yandex_agent/reporting.py'
   schedule:
     - cron: "37 */6 * * *"
 
@@ -31,7 +33,7 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install pytest
       - name: Test official price report parser
-        run: python -m pytest -q tests/test_yandex_official_prices.py
+        run: python -m pytest -q tests/test_yandex_official_prices.py tests/test_yandex_reporting.py
       - name: Read buyer-facing prices from official report
         env:
           YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
