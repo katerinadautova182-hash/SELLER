@@ -64,6 +64,9 @@ def resolve_rrp(offer_id: str, rrp_map: dict[str, float]) -> tuple[float | None,
         ) if value is not None else (None, "box_missing")
 
     canonical = canonical_sku(offer_id)
+    canonical_override = manual_rrp(canonical)
+    if canonical_override is not None:
+        return float(canonical_override), "alias_manual"
     value = rrp_map.get(normalize_sku(canonical))
     if value is not None:
         return float(value), "alias" if normalize_sku(canonical) != normalize_sku(offer_id) else "direct"
