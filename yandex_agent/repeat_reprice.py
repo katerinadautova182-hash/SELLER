@@ -91,19 +91,22 @@ def run():
         status,minimum=classify(buyer,rrp)
         if status != "OK":
             final_items.append({"sku":sku,"buyer":buyer,"minimum":minimum,"status":status})
+    target_status = "RED" if zone == "red" else "YELLOW"
+    pending_target = [x for x in final_items if x["status"] == target_status]
     state["final_violations"]=final_items
+    state["pending_target_zone"]=pending_target
     path.write_text(json.dumps(state,ensure_ascii=False,indent=2))
     lines=[f"Яндекс — корректировка {zone.upper()}",
-           f"Раундов: {len(state['rounds'])}; осталось нарушений: {len(final_items)}",
+           f"Раундов: {len(state['rounds'])}; осталось {target_status}: {len(pending_target)}",
            f"Пропусков по ограничениям: {len(state['stops'])}"]
-    for x in final_items:
+    for x in pending_target:
         lines.append(f"• {x['sku']}: {x['status']}, покупатель {x['buyer']:,.0f} ₽, цель {x['minimum']:,.0f} ₽")
-    if final_items: lines.append("Часть товаров не достигла цели. Дальнейшие повышения остановлены.")
+    if pending_target: lines.append("Часть товаров не достигла цели. Дальнейшие повышения остановлены.")
     text="\n".join(lines)
     print(text)
     for start in range(0,len(text),3500):
         send_telegram(text[start:start+3500])
-    return 0 if not final_items else 2
+    return 0 if not pending_target else 2
 
 if __name__=="__main__":
     raise SystemExit(run())
