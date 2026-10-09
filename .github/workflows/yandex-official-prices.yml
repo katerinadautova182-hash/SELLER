@@ -12,6 +12,7 @@ on:
       - 'ozon_agent/business_rules.py'
       - 'yandex_agent/price_check.py'
       - 'tests/test_yandex_reporting.py'
+      - 'yandex_agent/price_check.py'
   schedule:
     - cron: "37 */6 * * *"
 
