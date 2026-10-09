@@ -57,13 +57,13 @@ def add_history(rows, history):
     return updated
 
 
-def report_lines(changes, skipped, latest, high):
+def report_lines(changes, skipped, latest, high, rrp_map):
     by_sku = {str(r.get("offerId") or ""): number(r.get("onDisplay")) for r in latest}
     remaining = []
     for row in latest:
         sku = str(row.get("offerId") or "")
         value = number(row.get("onDisplay"))
-        rrp, _ = resolve_rrp(sku, load_rrp_cached)
+        rrp, _ = resolve_rrp(sku, rrp_map)
         if not sku or value is None or rrp is None or is_clearance_sku(sku):
             continue
         status, target = classify(value, rrp)
@@ -116,8 +116,7 @@ def send_lines(lines):
 def main():
     if os.getenv("YANDEX_SCHEDULED_CORRECTION_ENABLED") != "YES":
         raise RuntimeError("Scheduled corrections disabled")
-    global load_rrp_cached
-    load_rrp_cached = load_rrp()
+    rrp_map = load_rrp()
     client = YandexMarketClient()
     catalog, _, _ = _catalog(client)
     ids = sorted({int(row["business_id"]) for row in catalog})
@@ -131,7 +130,7 @@ def main():
         saved = {}
     history = saved.get("history") or {}
     high = detect_high_prices(before, history)
-    proposed, skipped = candidates(before, load_rrp_cached)
+    proposed, skipped = candidates(before, rrp_map)
     # Both RED and YELLOW are eligible, one increase each. candidates()
     # rejects changes greater than 15% of seller price.
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +145,7 @@ def main():
         after = obtain_report(client, business_id)
     else:
         after = before
-    lines, remaining = report_lines(proposed, skipped, after, high)
+    lines, remaining = report_lines(proposed, skipped, after, high, rrp_map)
     state["remaining"] = remaining
     state["buyer_after"] = {str(r.get("offerId")): number(r.get("onDisplay"))
                             for r in after if r.get("offerId")}
