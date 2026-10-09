@@ -23,3 +23,22 @@ def test_alias_rrp_lookup():
     assert resolve_rrp("801з", {}) == (9824.0, "alias_manual")
     assert resolve_rrp("JRL-BR1-32", {"BR132MM": 1902.0})[0] == 1902.0
     assert resolve_rrp("JRL-BR1-53", {"BR153MM": 2178.0})[0] == 2178.0
+
+def test_price_list_october_8_missing_yandex_skus():
+    from yandex_agent.price_check import resolve_rrp
+    items = {
+        "A11": 6780, "A13": 20726, "AC81": 157,
+        "Fr-1040": 10630, "MS 207 R": 3751, "MS 501 C": 2635,
+        "MS2011": 535, "MS2417": 642, "MS301": 2331,
+        "MS304": 2530, "MS402": 2375, "MS6958": 884, "PB74": 151,
+    }
+    for sku, expected in items.items():
+        actual, source = resolve_rrp(sku, {})
+        assert actual == expected, (sku, actual, source)
+
+
+def test_owner_confirmed_grooming_alias():
+    from yandex_agent.price_check import resolve_rrp
+    value, source = resolve_rrp("Груминг", {})
+    assert value == 18700
+    assert source == "owner_confirmed_grooming_alias"
