@@ -1,0 +1,48 @@
+name: Yandex one-time red/yellow correction
+
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - '.github/workflows/yandex-reprice-once.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yandex-one-time-reprice
+  cancel-in-progress: false
+
+jobs:
+  correction:
+    if: ${{ github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Enable one-time Yandex pricing trial') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+      - name: Validate one-shot safety rules
+        run: python -m pytest -q tests/test_yandex_one_shot.py
+      - name: Correct once and verify
+        env:
+          YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          YANDEX_ONE_SHOT_APPROVED: 'YES'
+        run: python -m yandex_agent.one_shot_reprice
+      - name: Save pre and post correction results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yandex-one-shot-repricing
+          path: artifacts/yandex-one-shot-reprice.json
+          if-no-files-found: ignore
+          retention-days: 30
