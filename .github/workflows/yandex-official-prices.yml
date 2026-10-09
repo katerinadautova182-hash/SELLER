@@ -2,17 +2,6 @@ name: Yandex official storefront price report
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - claude/ozon-seller-product-export-nubra0
-    paths:
-      - '.github/workflows/yandex-official-prices.yml'
-      - 'yandex_agent/official_prices.py'
-      - 'yandex_agent/reporting.py'
-      - 'ozon_agent/business_rules.py'
-      - 'yandex_agent/price_check.py'
-      - 'tests/test_yandex_reporting.py'
-      - 'yandex_agent/price_check.py'
   schedule:
     - cron: "37 */6 * * *"
 
