@@ -1,7 +1,7 @@
 """Diagnostic: try curl_cffi Chrome TLS impersonation for a handful of Yandex B2C cards.
 
 Adapted transport idea from https://github.com/Geekyup/Parser-Yandex-Market
-No cookies, no authentication to storefront, no price updates and NO claim that
+Optional securely configured cookies; no price updates and NO claim that
 a price belongs to our seller until independently verified.
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ import json
 import os
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from curl_cffi import requests as curl_requests
 
@@ -28,6 +29,29 @@ HEADERS = {
 }
 
 
+def load_cookies(raw: str) -> dict[str, str]:
+    if not raw.strip():
+        return {}
+    data = json.loads(raw)
+    if isinstance(data, dict):
+        if not all(isinstance(k, str) and isinstance(v, str) for k, v in data.items()):
+            raise ValueError("Cookie dictionary requires string keys and values")
+        return data
+    if isinstance(data, list):
+        result = {}
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError("Cookie list entries must be objects")
+            domain = str(item.get("domain") or "").lstrip(".")
+            if domain and not (domain == "yandex.ru" or domain.endswith(".yandex.ru")):
+                continue
+            name, value = item.get("name"), item.get("value")
+            if isinstance(name, str) and isinstance(value, str):
+                result[name] = value
+        return result
+    raise ValueError("Cookies must be a JSON object or array")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-products", type=int, default=5)
@@ -39,8 +63,12 @@ def main() -> int:
     mappings, seller_names, _ = _catalog(YandexMarketClient())
     rows = []
     checked_urls = set()
+    cookies = load_cookies(os.getenv('YANDEX_MARKET_COOKIES_JSON', ''))
+    print('Cookies configured:', bool(cookies))
 
     with curl_requests.Session(impersonate="chrome110", timeout=30) as session:
+        if cookies:
+            session.cookies.update(cookies)
         for mapping in mappings:
             if len(rows) >= args.max_products:
                 break
@@ -60,7 +88,6 @@ def main() -> int:
             try:
                 response = session.get(target, headers=HEADERS, timeout=30)
                 row["http_status"] = response.status_code
-                from urllib.parse import urlsplit
                 final_path = urlsplit(str(response.url)).path
                 row["final_path"] = final_path
                 row["bytes_received"] = len(response.content)
