@@ -5,6 +5,9 @@ from .catalog import normalize_sku
 # Confirmed marketplace aliases -> canonical reference SKU.
 # Once confirmed, an alias belongs here and must not be rediscovered every run.
 SKU_ALIASES = {
+    normalize_sku("801з"): "801green",
+    normalize_sku("JRL-BR1-32"): "BR1-32MM",
+    normalize_sku("JRL-BR1-53"): "BR1-53MM",
     normalize_sku("MS509"): "MS 509",
     normalize_sku("701GREY"): "701C",
     normalize_sku("801GREEN"): "801з",
