@@ -2,6 +2,11 @@ name: Yandex official storefront price report
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - '.github/workflows/yandex-official-prices.yml'
   schedule:
     - cron: "37 */6 * * *"
 
@@ -14,6 +19,7 @@ concurrency:
 
 jobs:
   audit:
+    if: ${{ github.event_name != 'push' || (github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Verify Yandex prices only now')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
