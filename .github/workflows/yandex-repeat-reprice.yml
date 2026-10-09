@@ -2,6 +2,11 @@ name: Yandex price corrections (manual RED / scheduled YELLOW)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/yandex-repeat-reprice.yml"
     inputs:
       zone:
         description: "Manual correction: RED only"
@@ -19,6 +24,7 @@ concurrency:
 
 jobs:
   reprice:
+    if: ${{ github.event_name != 'push' || (github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Run one RED Yandex correction now')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -43,7 +49,7 @@ jobs:
         run: |
           if [[ "$EVENT_NAME" == "schedule" ]]; then
             python -u -m yandex_agent.repeat_reprice --zone yellow
-          elif [[ "$EVENT_NAME" == "workflow_dispatch" && "$REQUESTED_ZONE" == "red" ]]; then
+          elif [[ "$EVENT_NAME" == "push" || ( "$EVENT_NAME" == "workflow_dispatch" && "$REQUESTED_ZONE" == "red" ) ]]; then
             python -u -m yandex_agent.repeat_reprice --zone red
           else
             echo "Unsupported trigger; no price updates"; exit 2
