@@ -5,6 +5,7 @@ Safety rules:
 - use current seller price from the live snapshot ("price.price" from /v5/product/info/prices);
 - raise by exactly 3% per run, rounded up to whole RUB;
 - small RED gaps up to 250 RUB are raised by 2x the missing buyer-price amount; larger RED gaps are untouched;
+- when a price is sent to Ozon, min_price is set to exactly the same value as price;
 - after update the workflow rebuilds the live snapshot and rechecks customer_price.
 """
 from __future__ import annotations
@@ -35,9 +36,6 @@ def plan_yellow_updates(snapshot: dict, rrp_map: dict[str, float]) -> list[dict]
         if current <= 0:
             continue
         new_price = float(ceil(current * RAISE_FACTOR))
-        min_price = float(item.get("ozon_min_price") or 0)
-        if min_price >= new_price:
-            min_price = 0.0
         planned.append({
             "offer_id": offer_id,
             "seller_price_before": current,
@@ -45,7 +43,7 @@ def plan_yellow_updates(snapshot: dict, rrp_map: dict[str, float]) -> list[dict]
             "customer_price_before": float(violation["customer_price"]),
             "rrp": float(violation["rrp"]),
             "green_floor": float(violation["floor"]),
-            "min_price": min_price,
+            "min_price": new_price,
         })
     return planned
 
@@ -53,11 +51,12 @@ def plan_yellow_updates(snapshot: dict, rrp_map: dict[str, float]) -> list[dict]
 def apply_updates(client, planned: list[dict]) -> list[dict]:
     results: list[dict] = []
     for row in planned:
+        seller_price = int(row["seller_price_after"])
         payload = {
             "prices": [{
                 "offer_id": row["offer_id"],
-                "price": str(int(row["seller_price_after"])),
-                "min_price": str(int(row["min_price"])) if row["min_price"] > 0 else "0",
+                "price": str(seller_price),
+                "min_price": str(seller_price),
                 "old_price": "0",
             }]
         }
@@ -66,9 +65,19 @@ def apply_updates(client, planned: list[dict]) -> list[dict]:
             result = (data.get("result") or [{}])[0]
             updated = bool(result.get("updated"))
             errors = result.get("errors") or []
-            results.append({**row, "api_updated": updated, "api_errors": errors})
+            results.append({
+                **row,
+                "min_price": float(seller_price),
+                "api_updated": updated,
+                "api_errors": errors,
+            })
         except Exception as exc:
-            results.append({**row, "api_updated": False, "api_errors": [str(exc)[:500]]})
+            results.append({
+                **row,
+                "min_price": float(seller_price),
+                "api_updated": False,
+                "api_errors": [str(exc)[:500]],
+            })
     return results
 
 
@@ -120,7 +129,8 @@ def main() -> int:
     for x in ok:
         print(
             f"UPDATED {x['offer_id']}: seller {x['seller_price_before']:.0f} -> "
-            f"{x['seller_price_after']:.0f}; customer before {x['customer_price_before']:.0f}; "
+            f"{x['seller_price_after']:.0f}; min price {x['min_price']:.0f}; "
+            f"customer before {x['customer_price_before']:.0f}; "
             f"green floor {x['green_floor']:.0f}"
         )
     for x in failed:
