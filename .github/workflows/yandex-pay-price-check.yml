@@ -37,8 +37,8 @@ jobs:
         env:
           YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YANDEX_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_YANDEX_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python - <<'PY'
           import os, sys
@@ -60,8 +60,8 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
           YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YANDEX_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_YANDEX_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           YANDEX_MARKET_REGION_ID: "213"
         run: |
           python -m compileall -q yandex_agent
