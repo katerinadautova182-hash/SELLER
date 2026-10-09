@@ -1,0 +1,57 @@
+name: Yandex scheduled price correction and anomaly alerts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "55 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yandex-price-correction
+  cancel-in-progress: false
+
+jobs:
+  correct-and-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+      - name: Verify pricing and anomaly detection rules
+        run: python -m pytest -q tests/test_yandex_scheduled_control.py tests/test_yandex_one_shot.py
+      - name: Restore history between runs
+        uses: actions/cache/restore@v4
+        with:
+          path: .state/yandex-price-history.json
+          key: yandex-buyer-history-${{ github.run_id }}
+          restore-keys: |
+            yandex-buyer-history-
+      - name: Correct RED once and YELLOW once, then check
+        env:
+          YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          YANDEX_SCHEDULED_CORRECTION_ENABLED: 'YES'
+        run: python -u -m yandex_agent.scheduled_control
+      - name: Save updated buyer-price history
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .state/yandex-price-history.json
+          key: yandex-buyer-history-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yandex-scheduled-price-results
+          path: artifacts/yandex-scheduled-control.json
+          if-no-files-found: ignore
+          retention-days: 30
