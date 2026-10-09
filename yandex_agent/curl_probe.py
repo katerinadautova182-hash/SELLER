@@ -60,9 +60,13 @@ def main() -> int:
             try:
                 response = session.get(target, headers=HEADERS, timeout=30)
                 row["http_status"] = response.status_code
-                row["final_url"] = str(response.url)
+                from urllib.parse import urlsplit
+                final_path = urlsplit(str(response.url)).path
+                row["final_path"] = final_path
                 row["bytes_received"] = len(response.content)
-                if response.status_code == 200:
+                if "showcaptcha" in final_path.lower():
+                    row["price_status"] = "CAPTCHA"
+                elif response.status_code == 200:
                     # Never save storefront HTML or cookies in public artifacts.
                     text = visible_text(response.text)
                     result = extract_pay_price(text, seller_names, str(response.url))
@@ -88,13 +92,14 @@ def main() -> int:
         "tested": len(rows),
         "http_200": sum(x["http_status"] == 200 for x in rows),
         "http_403": sum(x["http_status"] == 403 for x in rows),
+        "captcha": sum(x["price_status"] == "CAPTCHA" for x in rows),
         "seller_attributed_pay_price": sum(bool(x["verified"]) for x in rows),
         "items": rows,
         "disclaimer": "Diagnostic only; no RRP conclusions, no price changes."
     }
     output.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print("SUMMARY " + json.dumps({k:v for k,v in summary.items() if k!="items"}, ensure_ascii=False))
-    return 0 if summary["http_200"] else 2
+    return 0 if summary["seller_attributed_pay_price"] else 2
 
 
 if __name__ == "__main__":
