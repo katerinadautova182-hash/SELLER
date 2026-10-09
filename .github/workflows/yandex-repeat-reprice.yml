@@ -1,0 +1,59 @@
+name: Yandex price corrections (manual RED / scheduled YELLOW)
+
+on:
+  workflow_dispatch:
+    inputs:
+      zone:
+        description: "Manual correction: RED only"
+        required: true
+        type: choice
+        options:
+          - red
+  schedule:
+    - cron: "55 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yandex-price-correction
+  cancel-in-progress: false
+
+jobs:
+  reprice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+      - name: Validate repricing safety rules
+        run: python -m pytest -q tests/test_yandex_one_shot.py tests/test_yandex_repeat.py
+      - name: Scheduled yellow only OR manually approved red only
+        env:
+          YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          YANDEX_REPEAT_APPROVED: 'YES'
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_ZONE: ${{ inputs.zone }}
+        run: |
+          if [[ "$EVENT_NAME" == "schedule" ]]; then
+            python -u -m yandex_agent.repeat_reprice --zone yellow
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" && "$REQUESTED_ZONE" == "red" ]]; then
+            python -u -m yandex_agent.repeat_reprice --zone red
+          else
+            echo "Unsupported trigger; no price updates"; exit 2
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yandex-correction-audit
+          path: artifacts/yandex-repeat-control.json
+          if-no-files-found: ignore
+          retention-days: 30
