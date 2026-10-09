@@ -69,6 +69,9 @@ def load_rrp() -> dict[str, float]:
 
 
 def resolve_rrp(offer_id: str, rrp_map: dict[str, float]) -> tuple[float | None, str]:
+    # Owner-confirmed: this Yandex SKU is the existing PET GROOMING KIT.
+    if normalize_sku(offer_id) == normalize_sku("Груминг"):
+        return float(manual_rrp("PET GROOMING KIT")), "owner_confirmed_grooming_alias"
     value = manual_rrp(offer_id)
     if value is not None:
         return float(value), "manual"
