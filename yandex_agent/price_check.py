@@ -32,6 +32,24 @@ from ozon_agent.telegram import send_telegram
 from .client import YandexMarketClient
 from .storefront import fetch_pay_price
 
+# Yandex-specific SKUs verified against price-list "Изменение цен номенклатуры за 08.10.2026".
+# Preserve shared Ozon rules unchanged. Only previously unmapped Yandex SKU variants.
+YANDEX_RRP_FROM_20261008 = {
+    normalize_sku("A11"): 6780.0,
+    normalize_sku("A13"): 20726.0,
+    normalize_sku("AC81"): 157.0,
+    normalize_sku("Fr-1040"): 10630.0,
+    normalize_sku("MS 207 R"): 3751.0,  # 'гофре 207R' -> 207 ripple
+    normalize_sku("MS 501 C"): 2635.0,
+    normalize_sku("MS2011"): 535.0,
+    normalize_sku("MS2417"): 642.0,
+    normalize_sku("MS301"): 2331.0,  # price-list article 301
+    normalize_sku("MS304"): 2530.0,  # price-list article 304
+    normalize_sku("MS402"): 2375.0,  # price-list article 402
+    normalize_sku("MS6958"): 884.0,
+    normalize_sku("PB74"): 151.0,
+}
+
 RRP_FACTOR = 1.05
 REGION_ID = int(os.getenv("YANDEX_MARKET_REGION_ID", "213"))
 
@@ -70,6 +88,11 @@ def resolve_rrp(offer_id: str, rrp_map: dict[str, float]) -> tuple[float | None,
     value = rrp_map.get(normalize_sku(canonical))
     if value is not None:
         return float(value), "alias" if normalize_sku(canonical) != normalize_sku(offer_id) else "direct"
+    # Explicit fallback: the October 8 reference price list has these SKUs,
+    # which are missing from the older shared encoded RRP map.
+    value = YANDEX_RRP_FROM_20261008.get(normalize_sku(offer_id))
+    if value is not None:
+        return float(value), "yandex_price_list_20261008"
     return None, "missing"
 
 
