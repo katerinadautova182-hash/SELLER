@@ -2,6 +2,11 @@ name: Yandex official storefront price report
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - '.github/workflows/yandex-official-prices.yml'
   schedule:
     - cron: "37 */6 * * *"
 
