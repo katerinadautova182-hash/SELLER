@@ -9,8 +9,6 @@ on:
         type: choice
         options:
           - red
-  schedule:
-    - cron: "55 */6 * * *"
 
 permissions:
   contents: read
