@@ -31,7 +31,7 @@ jobs:
           pip install pytest
 
       - name: Test Yandex Pay storefront parser
-        run: pytest -q tests/test_yandex_price_check.py
+        run: python -m pytest -q tests/test_yandex_price_check.py
 
       - name: Check required secrets
         env:
