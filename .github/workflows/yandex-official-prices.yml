@@ -1,0 +1,48 @@
+name: Yandex official storefront price report
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - '.github/workflows/yandex-official-prices.yml'
+  schedule:
+    - cron: "37 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yandex-official-prices
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+      - name: Test official price report parser
+        run: python -m pytest -q tests/test_yandex_official_prices.py
+      - name: Read buyer-facing prices from official report
+        env:
+          YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m yandex_agent.official_prices
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yandex-official-prices
+          path: artifacts/yandex-official-prices.json
+          if-no-files-found: ignore
+          retention-days: 14
