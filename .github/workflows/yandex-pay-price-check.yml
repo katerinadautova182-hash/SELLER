@@ -2,8 +2,6 @@ name: Yandex Market Pay Price Check (Read Only)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "27 */6 * * *"
 
 concurrency:
   group: yandex-pay-price-check
