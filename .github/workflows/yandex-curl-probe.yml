@@ -1,4 +1,5 @@
 name: Yandex curl_cffi storefront probe (5 cards)
+# Recheck with optional session-cookie secret configured by repository owner.
 
 on:
   workflow_dispatch:
