@@ -92,7 +92,7 @@ def obtain_report(client: YandexMarketClient, business_id: int) -> list[dict]:
     report_id = result.get("reportId")
     if not report_id:
         raise RuntimeError("Report generation returned no reportId: " + repr(result)[:300])
-    for _ in range(30):
+    for _ in range(120):
         info = client.request("GET", f"/v2/reports/info/{report_id}").get("result") or {}
         status = info.get("status")
         if status == "DONE":
@@ -107,7 +107,7 @@ def obtain_report(client: YandexMarketClient, business_id: int) -> list[dict]:
         if status == "FAILED":
             raise RuntimeError("Yandex report FAILED: " + str(info.get("subStatus")))
         time.sleep(5)
-    raise TimeoutError(f"Report {report_id} not ready after 150 seconds")
+    raise TimeoutError(f"Report {report_id} not ready after 600 seconds")
 
 
 def run() -> int:
