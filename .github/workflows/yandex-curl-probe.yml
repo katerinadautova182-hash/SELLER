@@ -2,6 +2,12 @@ name: Yandex curl_cffi storefront probe (5 cards)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - '.github/workflows/yandex-curl-probe.yml'
+      - 'yandex_agent/curl_probe.py'
 
 permissions:
   contents: read
