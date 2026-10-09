@@ -17,3 +17,9 @@ def test_pagination():
 
 def test_rrp_suggestions():
     assert suggest_rrp("JRL-BR04-25", {"JRLBR0425": 1076.0}) == ["JRLBR0425"]
+
+def test_alias_rrp_lookup():
+    from yandex_agent.price_check import resolve_rrp
+    assert resolve_rrp("801з", {}) == (9824.0, "alias_manual")
+    assert resolve_rrp("JRL-BR1-32", {"BR132MM": 1902.0})[0] == 1902.0
+    assert resolve_rrp("JRL-BR1-53", {"BR153MM": 2178.0})[0] == 2178.0
