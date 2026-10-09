@@ -1,0 +1,47 @@
+name: Yandex one-time cleanup to target
+
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - '.github/workflows/yandex-cleanup-once.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yandex-price-correction
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: ${{ github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Run guarded Yandex cleanup now') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+      - name: Test cleanup constraints
+        run: python -m pytest -q tests/test_yandex_cleanup_once.py tests/test_yandex_one_shot.py
+      - name: Controlled corrections and verification
+        env:
+          YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          YANDEX_CLEANUP_ONCE: 'YES'
+        run: python -u -m yandex_agent.cleanup_once
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yandex-cleanup-audit
+          path: artifacts/yandex-cleanup.json
+          if-no-files-found: ignore
+          retention-days: 30
