@@ -261,8 +261,10 @@ def report(rows: list[dict], stats: dict) -> str:
                 f"• {row['offer_id']}: {row.get('pay_price_status') or 'UNKNOWN'}"
             )
 
-    if not red and not yellow:
-        lines.extend(("", "Нарушений по подтвержденной цене с картой Пэй нет."))
+    if stats["verified"] == 0:
+        lines.extend(("", "КРИТИЧЕСКАЯ ОШИБКА: ни одна цена Яндекс Пэй не подтверждена. Контроль РРЦ НЕ ВЫПОЛНЕН."))
+    elif not red and not yellow:
+        lines.extend(("", "Нарушений среди подтвержденных цен с картой Пэй нет."))
 
     return "\n".join(lines)
 
@@ -290,8 +292,11 @@ def main() -> int:
     print(message)
     send_telegram(message)
 
-    # UNVERIFIED does not make the workflow fail: it is diagnostic and never
-    # becomes a false green/red conclusion. API/credential errors still fail.
+    # Never signal success when there was no actual storefront verification.
+    # A successful catalog API call is NOT a successful Pay price audit.
+    if stats["verified"] == 0:
+        print("ERROR: zero verified Yandex Pay storefront prices; monitoring unavailable.")
+        return 2
     return 0
 
 
