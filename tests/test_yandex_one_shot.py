@@ -26,6 +26,7 @@ def test_no_clearance():
 
 def test_large_batch_is_chunked():
     from yandex_agent.one_shot_reprice import apply_one_shot
+    from ozon_agent.catalog import normalize_sku
 
     class Client:
         def __init__(self):
@@ -41,7 +42,7 @@ def test_large_batch_is_chunked():
         {"offerId": f"BULK-{idx}", "onDisplay": 900, "basicPrice": 1000}
         for idx in range(144)
     ]
-    rrp_map = {f"BULK-{idx}": 1000 for idx in range(144)}
+    rrp_map = {normalize_sku(f"BULK-{idx}"): 1000 for idx in range(144)}
     planned, skipped = candidates(records, rrp_map)
     assert len(planned) == 144
     assert not skipped
