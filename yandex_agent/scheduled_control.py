@@ -131,8 +131,8 @@ def main():
     history = saved.get("history") or {}
     high = detect_high_prices(before, history)
     proposed, skipped = candidates(before, rrp_map)
-    # Both RED and YELLOW are eligible, one increase each. candidates()
-    # rejects changes greater than 15% of seller price.
+    # Both RED and YELLOW are eligible, one increase each.
+    # The 200-SKU safety limit covers normal batches; writes are split into chunks of 40.
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     state = {"business_id": business_id, "planned": proposed, "skipped": skipped,
              "high_price_alerts": high, "write_sent": False}
