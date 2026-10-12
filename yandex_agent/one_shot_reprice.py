@@ -20,7 +20,8 @@ from .price_check import _catalog, classify, load_rrp, resolve_rrp
 from ozon_agent.business_rules import is_clearance_sku
 from ozon_agent.telegram import send_telegram
 
-MAX_TOTAL = 40
+MAX_TOTAL = 200
+MAX_UPDATE_BATCH = 40
 
 
 def candidates(items, rrp_map):
@@ -60,14 +61,16 @@ def candidates(items, rrp_map):
 
 
 def apply_one_shot(client, business_id, changes):
-    # Use the official business-level price endpoint; no batches bigger than 40.
-    offers = [{"offerId": x["sku"], "price": {
-        "value": x["seller_after"], "currencyId": "RUR"
-    }} for x in changes]
-    if not offers:
-        return
-    client.request("POST", f"/v2/businesses/{business_id}/offer-prices/updates",
-                   payload={"offers": offers})
+    # Conservative request chunks; 200 SKUs per run is permitted, never one giant request.
+    # Yandex's documented API limit is 500 offers/request.
+    for start in range(0, len(changes), MAX_UPDATE_BATCH):
+        batch = changes[start:start + MAX_UPDATE_BATCH]
+        offers = [{"offerId": x["sku"], "price": {
+            "value": x["seller_after"], "currencyId": "RUR"
+        }} for x in batch]
+        client.request("POST", f"/v2/businesses/{business_id}/offer-prices/updates",
+                       payload={"offers": offers})
+        print(f"Yandex price update accepted: batch {start // MAX_UPDATE_BATCH + 1}, {len(offers)} SKU", flush=True)
 
 
 def main():
