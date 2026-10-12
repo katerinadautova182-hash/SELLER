@@ -22,3 +22,30 @@ def test_exact_red_shortfall():
 def test_no_clearance():
     plan, skip=candidates([{"offerId":"403УЦ","onDisplay":"100","basicPrice":500}],{})
     assert not plan
+
+
+def test_large_batch_is_chunked():
+    from yandex_agent.one_shot_reprice import apply_one_shot
+
+    class Client:
+        def __init__(self):
+            self.batches = []
+
+        def request(self, method, path, *, payload):
+            assert method == "POST"
+            assert path == "/v2/businesses/123/offer-prices/updates"
+            self.batches.append(payload["offers"])
+            return {"status": "OK"}
+
+    records = [
+        {"offerId": f"BULK-{idx}", "onDisplay": 900, "basicPrice": 1000}
+        for idx in range(144)
+    ]
+    rrp_map = {f"BULK-{idx}": 1000 for idx in range(144)}
+    planned, skipped = candidates(records, rrp_map)
+    assert len(planned) == 144
+    assert not skipped
+    client = Client()
+    apply_one_shot(client, 123, planned)
+    assert [len(batch) for batch in client.batches] == [40, 40, 40, 24]
+    assert len({entry["offerId"] for batch in client.batches for entry in batch}) == 144
