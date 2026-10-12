@@ -100,10 +100,13 @@ def main():
     for round_no in (1, 2):
         rows = obtain_report(client, business_id)
         changes = plan(rows, rrp_map)
-        record = {"round": round_no, "planned": changes, "write_sent": False}
+        record = {"round": round_no, "planned": changes,
+                  "write_started": False, "write_sent": False}
         state["rounds"].append(record)
         OUTPUT.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
         if changes:
+            record["write_started"] = True
+            OUTPUT.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
             apply_one_shot(client, business_id, changes)
             record["write_sent"] = True
             OUTPUT.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -152,4 +155,28 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        # Preserve trace of the actual stage, including failures before first write.
+        OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            state = json.loads(OUTPUT.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            state = {}
+        error = f"{type(exc).__name__}: {str(exc)[:500]}"
+        state["error"] = error
+        OUTPUT.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        started = [r["round"] for r in state.get("rounds", []) if r.get("write_started")]
+        message = (
+            "Яндекс — разовое повышение НЕ завершено.\n"
+            f"Ошибка: {error}\n"
+            + (f"Начата отправка в прогонах {started}; проверьте витрину перед повтором."
+               if started else "Отправка новых цен НЕ начиналась.")
+        )
+        print(message, flush=True)
+        try:
+            send_telegram(message)
+        except Exception as notify_error:
+            print(f"Telegram failure alert not delivered: {notify_error}", flush=True)
+        raise
