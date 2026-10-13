@@ -1,5 +1,5 @@
 name: Yandex one-off two-pass repricing
-# 144-SKU batch test verified; intentionally triggered for the approved retry.
+# Manual two-pass repricing requested 2026-10-13; runs only for explicitly approved push.
 
 on:
   push:
