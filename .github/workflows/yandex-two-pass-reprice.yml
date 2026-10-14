@@ -1,5 +1,5 @@
 name: Yandex one-off two-pass repricing
-# Manual two-pass repricing requested 2026-10-13; runs only for explicitly approved push.
+# Manual two-pass repricing requested 2026-10-14; runs only for explicitly approved push.
 
 on:
   push:
