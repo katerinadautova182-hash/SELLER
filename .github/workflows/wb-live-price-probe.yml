@@ -1,0 +1,70 @@
+name: WB live price probe (read only)
+
+on:
+  push:
+    paths:
+      - .github/workflows/wb-live-price-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Query live Wildberries public price for Moscow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from wb_agent.buyer_price import (
+              CARD_API, DEFAULT_PAYMENT_URL, SETTINGS_URL, DEFAULT_DEST,
+              _read_json, fetch_wallet_config, fetch_buyer_prices
+          )
+          import json
+          import urllib.parse
+          nm_id = 1308438233
+          dest = DEFAULT_DEST
+          params = urllib.parse.urlencode({"appType":"1","curr":"rub","lang":"ru","dest":dest,"nm":str(nm_id)})
+          card_url = CARD_API + "?" + params
+          print(f"ARTICLE: {nm_id}; REGION: Moscow; DEST: {dest}", flush=True)
+          print("CARD URL:", card_url, flush=True)
+          for title, url in [
+              ("card", card_url),
+              ("default-payment", DEFAULT_PAYMENT_URL),
+              ("settings-front", SETTINGS_URL),
+          ]:
+              try:
+                  data = _read_json(url, timeout=20)
+                  print(title, "RESULT: OK", "TOP_LEVEL_KEYS:", list(data)[:15], flush=True)
+                  if title == "card":
+                      products = data.get("products") or (data.get("data") or {}).get("products") or []
+                      print("card products returned:", len(products), flush=True)
+                      for product in products[:3]:
+                          print("card product id", product.get("id"), "supplierId", product.get("supplierId"))
+                          for size in (product.get("sizes") or [])[:5]:
+                              print("size", json.dumps({key: size.get(key) for key in ("name","optionId","price","stocks")}, ensure_ascii=False)[:1200], flush=True)
+                      if not products:
+                          print("card JSON preview:", json.dumps(data, ensure_ascii=False)[:800], flush=True)
+                  elif title == "default-payment":
+                      print("wallet rules", json.dumps([
+                          r for r in (data.get("data") or [])
+                          if isinstance(r,dict) and ("кошел" in str(r.get("wc_type","")).lower())
+                      ], ensure_ascii=False)[:1200], flush=True)
+                  else:
+                      print("wallet price threshold", (data.get("variables") or {}).get("wlt1DiscountDisplayMaxPrice"), flush=True)
+              except Exception as exc:
+                  print(title, "RESULT: ERROR", type(exc).__name__, str(exc)[:350], flush=True)
+          try:
+              config = fetch_wallet_config()
+              print("WALLET_CONFIG:", config, flush=True)
+              prices = fetch_buyer_prices([nm_id],dest=dest,wallet_config=config)
+              print("FINAL_RESULT:", json.dumps({str(k):v.to_dict() for k,v in prices.items()},ensure_ascii=False), flush=True)
+          except Exception as exc:
+              print("FINAL_RESULT: ERROR", type(exc).__name__, str(exc)[:350], flush=True)
+          PY
