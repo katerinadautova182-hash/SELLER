@@ -1,0 +1,125 @@
+name: Mark Shmidt promo 19 Oct - 20 Nov
+
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/mark-shmidt-promo-2026.yml"
+  schedule:
+    # Promo is inclusive through 20 Nov (Moscow). Restore early on 21 Nov.
+    - cron: "20 0 21 11 *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mark-shmidt-promo-2026
+  cancel-in-progress: false
+
+jobs:
+  ozon:
+    if: ${{ github.event_name != 'push' || startsWith(github.event.head_commit.message, 'Run Mark Shmidt promo repricing') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+      - name: Tests
+        run: python -m pytest -q tests/test_promo_policy.py tests/test_price_alert.py tests/test_auto_fix_yellow.py
+      - name: Select promo/restore mode
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "PROMO_MODE=restore" >> "$GITHUB_ENV"
+          else
+            echo "PROMO_MODE=promo" >> "$GITHUB_ENV"
+          fi
+      - name: Ozon snapshot before pass 1
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+        run: python -m ozon_agent.live_snapshot --output artifacts/ozon-promo-before-1.json
+      - name: Ozon pass 1
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          MARK_SHMIDT_PROMO_APPROVED: "YES"
+        run: python -m ozon_agent.promo_reprice --snapshot artifacts/ozon-promo-before-1.json --output artifacts/ozon-promo-pass-1.json --mode "$PROMO_MODE" --round 1
+      - run: sleep 120
+      - name: Ozon snapshot before pass 2
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+        run: python -m ozon_agent.live_snapshot --output artifacts/ozon-promo-before-2.json
+      - name: Ozon pass 2
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          MARK_SHMIDT_PROMO_APPROVED: "YES"
+        run: python -m ozon_agent.promo_reprice --snapshot artifacts/ozon-promo-before-2.json --output artifacts/ozon-promo-pass-2.json --mode "$PROMO_MODE" --round 2
+      - run: sleep 120
+      - name: Ozon final verification
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+        run: python -m ozon_agent.live_snapshot --output artifacts/ozon-promo-final.json
+      - name: Telegram final Ozon price report
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          FORCE_RED_REPORT: "YES"
+        run: python -m ozon_agent.price_alert --snapshot artifacts/ozon-promo-final.json
+      - name: Save Ozon audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mark-shmidt-promo-ozon
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 45
+
+  yandex:
+    if: ${{ github.event_name != 'push' || startsWith(github.event.head_commit.message, 'Run Mark Shmidt promo repricing') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -r requirements.txt
+      - name: Select promo/restore mode
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "PROMO_MODE=restore" >> "$GITHUB_ENV"
+          else
+            echo "PROMO_MODE=promo" >> "$GITHUB_ENV"
+          fi
+      - name: Yandex two-pass promo repricing
+        env:
+          YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MARK_SHMIDT_PROMO_APPROVED: "YES"
+        run: python -u -m yandex_agent.promo_reprice --mode "$PROMO_MODE" --output artifacts/yandex-promo-reprice.json
+      - name: Save Yandex audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mark-shmidt-promo-yandex
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 45
