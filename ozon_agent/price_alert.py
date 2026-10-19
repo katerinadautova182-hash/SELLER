@@ -20,6 +20,7 @@ from statistics import median
 
 from .business_rules import is_clearance_sku, canonical_sku, manual_rrp, box_rule
 from .catalog import normalize_sku
+from .promo_policy import effective_rrp
 from .telegram import send_telegram
 
 RRP_FACTOR = 1.05
@@ -66,6 +67,7 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
                 rrp = (base_rrp * multiplier) if base_rrp is not None else None
             else:
                 rrp = rrp_map.get(normalize_sku(reference_sku))
+        rrp = effective_rrp(offer_id, rrp, rrp_map)
         if rrp is None:
             stats["rrp_missing"] += 1
             stats["rrp_missing_offer_ids"].append(offer_id)
