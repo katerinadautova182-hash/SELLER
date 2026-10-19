@@ -15,6 +15,7 @@ import urllib.request
 from math import ceil
 
 from ozon_agent.catalog import normalize_sku
+from ozon_agent.promo_policy import effective_rrp
 from ozon_agent.business_rules import canonical_sku, is_clearance_sku, manual_rrp, box_rule
 from .sku_aliases import WB_RRP_ALIASES
 from .fbs import available_nmids
@@ -88,6 +89,7 @@ def analyze(items, rrp):
         if reference is None:
             missing.append({"sku": sku, "nm_id": nm_id})
             continue
+        reference = effective_rrp(sku, reference, rrp)
         sizes = item.get("sizes") or []
         for size in sizes:
             price = size.get("clubDiscountedPrice")
@@ -175,6 +177,7 @@ def main():
                 canonical = WB_RRP_ALIASES.get(normalize_sku(sku), canonical_sku(sku))
                 reference = rrp.get(normalize_sku(canonical))
         if reference is not None:
+            reference = effective_rrp(sku, reference, rrp)
             reference_by_nm[nm] = {"sku": sku, "rrp": reference}
     historical_red, historical_yellow = [], []
     for nm, obs in observations.items():
