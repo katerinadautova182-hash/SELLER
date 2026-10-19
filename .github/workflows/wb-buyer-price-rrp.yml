@@ -1,0 +1,69 @@
+name: WB Buyer Price RRP Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Actually submit safe upward price corrections"
+        required: true
+        default: false
+        type: boolean
+  schedule:
+    - cron: "17 */2 * * *"
+
+concurrency:
+  group: wb-buyer-price-rrp
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WB_API_KEY: ${{ secrets.WB_API_KEY }}
+      RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+      TELEGRAM_WB_BOT_TOKEN: ${{ secrets.TELEGRAM_WB_BOT_TOKEN }}
+      TELEGRAM_WB_CHAT_ID: ${{ secrets.TELEGRAM_WB_CHAT_ID }}
+      WB_BUYER_DEST: ${{ vars.WB_BUYER_DEST }}
+      WB_EXPECTED_SUPPLIER_ID: ${{ vars.WB_EXPECTED_SUPPLIER_ID }}
+      WB_RRP_BUFFER_PCT: ${{ vars.WB_RRP_BUFFER_PCT || '5' }}
+      WB_REPRICE_MAX_STEP_PCT: ${{ vars.WB_REPRICE_MAX_STEP_PCT || '20' }}
+      WB_REPRICE_CONFIRM_SECONDS: "5"
+      WB_REPRICE_APPLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.apply) || (github.event_name == 'schedule' && vars.WB_AUTO_REPRICE == '1') }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependency
+        run: python -m pip install -q pytest
+
+      - name: Unit tests
+        run: pytest -q tests/test_wb_buyer_price.py tests/test_wb_rrp_reprice.py
+
+      - name: Validate required secrets
+        run: |
+          python - <<'PY'
+          import os
+          missing = [name for name in ("WB_API_KEY", "RRP_MAP_B64") if not os.getenv(name)]
+          if missing:
+              raise SystemExit("Missing secrets: " + ", ".join(missing))
+          print("WB secrets configured; values hidden.")
+          PY
+
+      - name: Check buyer price and enforce RRP policy
+        run: python -m wb_agent.rrp_reprice
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wb-buyer-price-rrp
+          path: artifacts/wb-rrp-control.json
+          if-no-files-found: ignore
+          retention-days: 14
