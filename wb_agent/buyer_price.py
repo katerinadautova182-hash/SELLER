@@ -148,7 +148,7 @@ def calculate_wallet_price(
     product_price_kopecks: int,
     logistics_kopecks: int,
     config: WalletConfig,
-) -> tuple[int, int, int, bool]:
+) -> tuple[int, int, int, int, bool]:
     """Return public, Wallet, product and logistics prices in whole RUB.
 
     WB's public Wallet rule is applied to the product component; logistics is
