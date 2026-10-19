@@ -29,6 +29,7 @@ from ozon_agent.business_rules import (
 )
 from ozon_agent.catalog import normalize_sku
 from ozon_agent.telegram import send_telegram
+from ozon_agent.promo_policy import effective_rrp
 from .client import YandexMarketClient
 from .storefront import fetch_pay_price
 
@@ -68,7 +69,7 @@ def load_rrp() -> dict[str, float]:
     }
 
 
-def resolve_rrp(offer_id: str, rrp_map: dict[str, float]) -> tuple[float | None, str]:
+def resolve_regular_rrp(offer_id: str, rrp_map: dict[str, float]) -> tuple[float | None, str]:
     # Owner-confirmed: this Yandex SKU is the existing PET GROOMING KIT.
     if normalize_sku(offer_id) == normalize_sku("Груминг"):
         return float(manual_rrp("PET GROOMING KIT")), "owner_confirmed_grooming_alias"
@@ -97,6 +98,14 @@ def resolve_rrp(offer_id: str, rrp_map: dict[str, float]) -> tuple[float | None,
     if value is not None:
         return float(value), "yandex_price_list_20261008"
     return None, "missing"
+
+
+def resolve_rrp(offer_id: str, rrp_map: dict[str, float]) -> tuple[float | None, str]:
+    value, source = resolve_regular_rrp(offer_id, rrp_map)
+    effective = effective_rrp(offer_id, value, rrp_map)
+    if effective is not None and value is not None and effective != value:
+        return float(effective), "promo_20261019_20261120"
+    return value, source
 
 
 def _b2c_url(row: dict) -> str | None:
