@@ -14,12 +14,11 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: mark-shmidt-promo-2026
-  cancel-in-progress: false
-
 jobs:
   ozon:
+    concurrency:
+      group: ozon-margin-check
+      cancel-in-progress: false
     if: ${{ github.event_name != 'push' || startsWith(github.event.head_commit.message, 'Run Mark Shmidt promo repricing') }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -90,6 +89,9 @@ jobs:
           retention-days: 45
 
   yandex:
+    concurrency:
+      group: yandex-price-correction
+      cancel-in-progress: false
     if: ${{ github.event_name != 'push' || startsWith(github.event.head_commit.message, 'Run Mark Shmidt promo repricing') }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
