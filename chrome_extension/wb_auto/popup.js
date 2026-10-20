@@ -5,7 +5,7 @@ async function refresh() {
   if (!res?.ok) return;
   const s = res.state;
   status(s.message || 'Ожидание запуска.');
-  $('numbers').textContent = `Товаров: ${s.total} · Проверено: ${s.index} · Цен получено: ${s.success} · Ошибок: ${s.errors}`;
+  $('numbers').textContent = `Товаров: ${s.total} · Проверено: ${s.index} · Цен получено: ${s.success} · Нет в наличии: ${s.skipped || 0} · Ошибок: ${s.errors}`;
   $('progress').value = s.total ? Math.round(100 * s.index / s.total) : 0;
   $('start').disabled = Boolean(s.running);
   $('stop').disabled = !s.running;

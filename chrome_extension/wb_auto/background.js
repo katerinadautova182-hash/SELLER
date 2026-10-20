@@ -2,7 +2,7 @@
 const STATE = 'wb_auto_state', ROWS = 'wb_auto_rows', ITEMS = 'wb_auto_items', ALARM = 'wb_auto_watchdog';
 let processing = false;
 const INITIAL = {running:false,status:'idle',index:0,total:0,success:0,errors:0,
-  current_nm:null,tab_id:null,consecutive_blocked:0,started_at:null,updated_at:null,message:''};
+  current_nm:null,tab_id:null,skipped:0,consecutive_blocked:0,started_at:null,updated_at:null,message:''};
 async function stateGet() {
   const obj = await chrome.storage.local.get(STATE);
   return {...INITIAL,...(obj[STATE] || {})};
@@ -133,15 +133,16 @@ async function recordPrice(nm,sender,payload) {
     const item=items[state.index];
     if (!item || item.nm_id!==nm) return {ok:false};
     const result=payload.result;
-    const valid=result && result.nm_id===nm && Number.isSafeInteger(result.public_price_rub)
+    const skipped=payload.unavailable===true;
+    const valid=!skipped && result && result.nm_id===nm && Number.isSafeInteger(result.public_price_rub)
       && result.public_price_rub>0 && Number.isSafeInteger(result.min_price_rub) && result.min_price_rub>0;
     const row={nm_id:nm,sku:item.sku,seller_base_rub:item.seller_base_rub,
       seller_discounted_rub:item.seller_discounted_rub,
       buyer_public_rub:valid?result.public_price_rub:null,
       buyer_min_rub:valid?result.min_price_rub:null,
       buyer_wallet_rub:valid && Number.isSafeInteger(result.wallet_price_rub)?result.wallet_price_rub:null,
-      read_status:valid?'OK':'ERROR',
-      error:valid?'':String(payload.error || 'Не удалось подтвердить цену'),
+      read_status:valid?'OK':skipped?'SKIP_OUT_OF_STOCK':'ERROR',
+      error:(valid || skipped)?'':String(payload.error || 'Не удалось подтвердить цену'),
       region:'регион текущей браузерной сессии',
       checked_at:new Date().toISOString(),source:valid?result.source:''};
     const rows=(await chrome.storage.local.get(ROWS))[ROWS] || [];
@@ -151,11 +152,12 @@ async function recordPrice(nm,sender,payload) {
     const strike=blocked?state.consecutive_blocked+1:0;
     const more=state.index+1<items.length,halt=strike>=3;
     await stateSave({index:state.index+1,success:state.success+(valid?1:0),
-      errors:state.errors+(valid?0:1),consecutive_blocked:strike,
+      skipped:state.skipped+(skipped?1:0),
+      errors:state.errors+(!valid && !skipped?1:0),consecutive_blocked:strike,
       status:halt?'blocked':more?'waiting_next':'completed',
       running:!halt && more,
       message:halt?'WB заблокировал три карточки подряд. Сбор остановлен во избежание ограничений.':
-        'Проверено '+(state.index+1)+' из '+items.length+'. Успешно: '+(state.success+(valid?1:0))+'. Ошибок: '+(state.errors+(valid?0:1))+'.'});
+        'Проверено '+(state.index+1)+' из '+items.length+'. Цен: '+(state.success+(valid?1:0))+'. Без наличия: '+(state.skipped+(skipped?1:0))+'. Ошибок: '+(state.errors+(!valid && !skipped?1:0))+'.'});
     continuation=!halt && more;
     if (halt || !more) await chrome.alarms.clear(ALARM);
     return {ok:true};
