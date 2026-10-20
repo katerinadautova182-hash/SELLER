@@ -72,3 +72,71 @@ def test_alias_and_missing_rrp_are_not_guessed():
     assert regular==1600
     assert effective==1600
     assert references("UNKNOWN MODEL",ref,date(2026,10,20))[0] is None
+
+
+
+def test_markup_more_than_30_percent_for_rrp_above_1500():
+    ref={normalize_sku("2020C"):2000.0}
+    normal=analyze([source_row("2020C",2600,base=4000)],ref,
+                   as_of=date(2026,10,20))[0]
+    flagged=analyze([source_row("2020C",2601,base=4000)],ref,
+                    as_of=date(2026,10,20))[0]
+    assert normal["control_status"]=="OK"
+    assert flagged["control_status"]=="HIGH_MARKUP_REVIEW"
+    assert flagged["markup_over_applied_rrp_pct"]==30.05
+    assert flagged["action"]=="REVIEW_HIGH_MARKUP_REVIEW"
+    assert flagged["seller_price_proposed"] is None
+    assert flagged["apply"] is False
+
+
+def test_cheap_rrp_inclusive_1500_and_markup_alert_bands():
+    ref={normalize_sku("2020C"):1500.0}
+    source=[
+        source_row("2020C",2250),
+        source_row("2020C",2251),
+        source_row("2020C",2550),
+        source_row("2020C",2551),
+    ]
+    rows=analyze(source,ref,as_of=date(2026,10,20))
+    assert [x["control_status"] for x in rows]==[
+        "OK","HIGH_MARKUP_REVIEW","HIGH_MARKUP_REVIEW","HIGH_MARKUP_URGENT"
+    ]
+    assert all(x["apply"] is False for x in rows)
+
+
+def test_promo_over_five_percent_flagged_even_below_30_markup():
+    ref={normalize_sku("206"):13284.0}
+    result=analyze([source_row("206",10000,base=20000)],ref,
+                   as_of=date(2026,10,20))[0]
+    assert result["rrp_regular"]==13284.0
+    assert result["rrp_applied"]==9299.0
+    assert result["rrp_plus_5"]==9764
+    assert result["zone"]=="OK"
+    assert result["control_status"]=="PROMO_ABOVE_TARGET"
+    assert result["promo_over_target"] is True
+    assert result["high_markup_level"]==""
+    assert result["action"]=="REVIEW_PROMO_OVER_TARGET"
+    assert result["seller_price_proposed"]==19528
+    assert result["seller_change_pct"]<0
+    assert result["apply"] is False
+
+
+def test_promo_206_15699_is_flagged_but_never_auto_lowered():
+    ref={normalize_sku("206"):13284.0}
+    result=analyze([source_row("206",15699,base=22000)],ref,
+                   as_of=date(2026,10,20))[0]
+    assert result["control_status"]=="PROMO_ABOVE_TARGET"
+    assert result["high_markup_level"]=="REVIEW"
+    assert result["promo_excess_rub"]==5935.0
+    assert result["action"]=="REVIEW_PROMO_OVER_TARGET"
+    assert result["seller_change_pct"]<0
+    assert result["apply"] is False
+
+
+def test_ordinary_nonpromo_price_within_30_no_change():
+    ref={normalize_sku("2020C"):2000.0}
+    result=analyze([source_row("2020C",2500)],ref,
+                   as_of=date(2026,10,20))[0]
+    assert result["promo_over_target"] is False
+    assert result["control_status"]=="OK"
+    assert result["action"]==""
