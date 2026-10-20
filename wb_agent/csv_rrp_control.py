@@ -112,7 +112,7 @@ def high_markup_level(buyer: Decimal | None, applied_rrp: float | None) -> str:
     """Price anomaly rules for non-promo and promotional items.
 
     Above RRP 1500: flag strictly over 30%.
-    RRP <= 1500: flag strictly over 50%; urgent strictly over 70%.
+    RRP <= 1500: up to +70% is allowed; review strictly over +70%.
     Never treats this alert as an automatic authorization to lower prices.
     """
     if buyer is None or applied_rrp is None or applied_rrp <= 0:
@@ -120,9 +120,7 @@ def high_markup_level(buyer: Decimal | None, applied_rrp: float | None) -> str:
     base = Decimal(str(applied_rrp))
     if base > 1500:
         return "REVIEW" if buyer > base * Decimal("1.30") else ""
-    if buyer > base * Decimal("1.70"):
-        return "URGENT"
-    return "REVIEW" if buyer > base * Decimal("1.50") else ""
+    return "URGENT" if buyer > base * Decimal("1.70") else ""
 
 
 def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
@@ -136,6 +134,12 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
         regular, applied, rr_rule = references(sku, rrp_map, day)
         is_promo = bool(regular is not None and applied is not None and regular != applied)
         target = ceiling(Decimal(str(applied)) * Decimal("1.05")) if applied is not None else None
+        tolerance_floor = ceiling(Decimal(str(applied)) * Decimal("1.02")) if applied is not None else None
+        tolerance_ceiling = (
+            int((Decimal(str(applied)) * (Decimal("1.70") if applied <= 1500 else Decimal("1.08")))
+                .quantize(Decimal("1"), rounding=ROUND_FLOOR))
+            if applied is not None else None
+        )
         scraped = str(item.get("read_status") or "").strip().upper()
         if scraped == "SKIP_OUT_OF_STOCK":
             status = "NO_STOCK"
@@ -160,8 +164,8 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
         )
         high_level = high_markup_level(buyer, applied) if status == "OK" else ""
         promo_over_target = bool(
-            status == "OK" and is_promo and buyer is not None
-            and target is not None and buyer > Decimal(target)
+            status == "OK" and is_promo and buyer is not None and
+            tolerance_ceiling is not None and buyer > Decimal(tolerance_ceiling)
         )
         if promo_over_target:
             upper_zone = "PROMO_ABOVE_TARGET"
@@ -172,11 +176,20 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
         else:
             upper_zone = "NORMAL"
         control_status = upper_zone if status == "OK" and upper_zone != "NORMAL" else status
+        if applied is not None and buyer is not None:
+            if tolerance_floor <= buyer <= tolerance_ceiling:
+                control_status = "OK"
+            elif buyer < tolerance_floor:
+                control_status = "BELOW_TOLERANCE"
+            elif applied <= 1500 and buyer > tolerance_ceiling:
+                control_status = "CHEAP_ABOVE_170_PCT_RRP"
+            elif not is_promo and buyer > tolerance_ceiling:
+                control_status = "HIGH_MARKUP_REVIEW" if high_level else "ABOVE_TOLERANCE"
 
         proposed = None
         change_pct = None
         action = ""
-        if status in {"RED", "YELLOW"}:
+        if control_status == "BELOW_TOLERANCE":
             if base_price is None:
                 action = "REVIEW_NO_BASE_PRICE"
             else:
@@ -194,7 +207,7 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
                     action = "NO_ACTION"
                 else:
                     action = "PROPOSE_UPWARD_CHANGE"
-        elif status == "OK" and promo_over_target:
+        elif promo_over_target:
             # Estimate ONLY, never authorize an automatic write. A change to
             # seller base may not scale buyer price linearly under WB promotions.
             action = "REVIEW_PROMO_OVER_TARGET"
@@ -204,13 +217,26 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
                 if estimated > 0 and estimated < base_price:
                     proposed = int(estimated)
                     change_pct = float((estimated / base_price - 1) * 100)
+        elif control_status == "CHEAP_ABOVE_170_PCT_RRP":
+            action = "REVIEW_CHEAP_ABOVE_LIMIT"
         elif status == "OK" and high_level:
             action = "REVIEW_HIGH_MARKUP_" + high_level
-        elif status != "OK":
+        elif control_status == "ABOVE_TOLERANCE":
+            action = "REVIEW_ABOVE_TOLERANCE"
+            if base_price is not None and buyer is not None:
+                estimated = (base_price * Decimal(target) / buyer).quantize(
+                    Decimal("1"), rounding=ROUND_FLOOR)
+                if estimated > 0 and estimated < base_price:
+                    proposed = int(estimated)
+                    change_pct = float((estimated / base_price - 1) * 100)
+        elif status != "OK" and control_status != "OK":
             action = "SKIP_" + status
         result = {**item, "analysis_day":day.isoformat(), "rrp_regular":regular,
             "rrp_applied":applied, "promo_rrp_active":is_promo, "rrp_rule":rr_rule,
-            "rrp_plus_5":target, "buyer_price":float(buyer) if buyer else None,
+            "rrp_plus_5":target,
+            "allowed_buyer_min":tolerance_floor,
+            "allowed_buyer_max":tolerance_ceiling,
+            "buyer_price":float(buyer) if buyer else None,
             "zone":status, "control_status":control_status, "upper_zone":upper_zone,
             "markup_over_applied_rrp_pct":markup_pct,
             "high_markup_level":high_level,
