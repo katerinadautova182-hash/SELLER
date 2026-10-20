@@ -23,4 +23,4 @@ jobs:
       - name: Compile browser probe
         run: python -m py_compile wb_agent/browser_price_probe.py
       - name: Unit tests; no WB network
-        run: pytest -q tests/test_wb_browser_price_probe.py
+        run: python -m pytest -q tests/test_wb_browser_price_probe.py
