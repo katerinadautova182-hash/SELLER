@@ -28,12 +28,13 @@ def test_red_uses_effective_rrp_and_proportional_correction():
     assert row["action"]=="REVIEW_STEP_TOO_LARGE"
 
 
-def test_yellow_uses_exact_three_percent_seller_increase():
+def test_plus_two_percent_is_within_owner_tolerance():
     ref={normalize_sku("2020C"):1000.0}
     row=analyze([source_row("2020C",1020)],ref,as_of=date(2026,10,20))[0]
     assert row["zone"]=="YELLOW"
-    assert row["seller_price_proposed"]==10300
-    assert row["action"]=="PROPOSE_UPWARD_CHANGE"
+    assert row["control_status"]=="OK"
+    assert row["seller_price_proposed"] is None
+    assert row["action"]==""
 
 
 def test_no_price_means_no_proposed_seller_write():
@@ -81,7 +82,7 @@ def test_markup_more_than_30_percent_for_rrp_above_1500():
                    as_of=date(2026,10,20))[0]
     flagged=analyze([source_row("2020C",2601,base=4000)],ref,
                     as_of=date(2026,10,20))[0]
-    assert normal["control_status"]=="OK"
+    assert normal["control_status"]=="ABOVE_TOLERANCE"
     assert flagged["control_status"]=="HIGH_MARKUP_REVIEW"
     assert flagged["markup_over_applied_rrp_pct"]==30.05
     assert flagged["action"]=="REVIEW_HIGH_MARKUP_REVIEW"
@@ -99,14 +100,14 @@ def test_cheap_rrp_inclusive_1500_and_markup_alert_bands():
     ]
     rows=analyze(source,ref,as_of=date(2026,10,20))
     assert [x["control_status"] for x in rows]==[
-        "OK","HIGH_MARKUP_REVIEW","HIGH_MARKUP_REVIEW","HIGH_MARKUP_URGENT"
+        "OK","OK","OK","CHEAP_ABOVE_170_PCT_RRP"
     ]
     assert all(x["apply"] is False for x in rows)
 
 
-def test_promo_over_five_percent_flagged_even_below_30_markup():
+def test_promo_over_plus_eight_percent_flagged_even_below_30_markup():
     ref={normalize_sku("206"):13284.0}
-    result=analyze([source_row("206",10000,base=20000)],ref,
+    result=analyze([source_row("206",10100,base=20000)],ref,
                    as_of=date(2026,10,20))[0]
     assert result["rrp_regular"]==13284.0
     assert result["rrp_applied"]==9299.0
@@ -116,7 +117,7 @@ def test_promo_over_five_percent_flagged_even_below_30_markup():
     assert result["promo_over_target"] is True
     assert result["high_markup_level"]==""
     assert result["action"]=="REVIEW_PROMO_OVER_TARGET"
-    assert result["seller_price_proposed"]==19528
+    assert result["seller_price_proposed"]==19334
     assert result["seller_change_pct"]<0
     assert result["apply"] is False
 
@@ -135,8 +136,24 @@ def test_promo_206_15699_is_flagged_but_never_auto_lowered():
 
 def test_ordinary_nonpromo_price_within_30_no_change():
     ref={normalize_sku("2020C"):2000.0}
-    result=analyze([source_row("2020C",2500)],ref,
+    result=analyze([source_row("2020C",2100)],ref,
                    as_of=date(2026,10,20))[0]
     assert result["promo_over_target"] is False
     assert result["control_status"]=="OK"
     assert result["action"]==""
+
+
+def test_promo_cheap_goods_allow_to_170_percent_even_above_plus_five():
+    ref={normalize_sku("MS702"):1374.0}
+    upper=963 * 1.70
+    rows=analyze([
+      source_row("MS702",1637),
+      source_row("MS702",1638),
+    ],ref,as_of=date(2026,10,20))
+    assert rows[0]["rrp_applied"] == 963.0
+    assert rows[0]["allowed_buyer_max"] == 1637
+    assert rows[0]["control_status"] == "OK"
+    assert rows[0]["action"] == ""
+    assert rows[1]["control_status"] == "CHEAP_ABOVE_170_PCT_RRP"
+    assert rows[1]["action"] == "REVIEW_PROMO_OVER_TARGET"
+    assert all(row["apply"] is False for row in rows)
