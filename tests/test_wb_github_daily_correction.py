@@ -9,7 +9,7 @@ from wb_agent.github_daily_correction import (
 NOW = datetime(2026, 10, 20, 15, tzinfo=timezone.utc)
 
 
-def scan(sku="2020C", price=4000, hours_old=24, state="OK", nm=777):
+def scan(sku="2020C", price=3500, hours_old=24, state="OK", nm=777):
     return {
         "nm_id": str(nm), "sku": sku,
         "buyer_min_rub": str(price) if state == "OK" else "",
@@ -18,7 +18,7 @@ def scan(sku="2020C", price=4000, hours_old=24, state="OK", nm=777):
     }
 
 
-def seller(sku="2020C", nm=777, base=10000, discount_price=7000):
+def seller(sku="2020C", nm=777, base=10000, discount_price=4400):
     return {nm: {"nmID": nm, "vendorCode": sku, "sizes": [
         {"price":base,"discountedPrice":discount_price,"clubDiscount":0}
     ]}}
@@ -32,7 +32,7 @@ def test_buyer_only_input_does_not_require_private_seller_prices():
 
 
 def test_daily_snapshot_accepted_after_twenty_four_hours():
-    rows=[scan(hours_old=24,price=4000)]
+    rows=[scan(hours_old=24,price=3500)]
     ref={normalize_sku("2020C"):3900}
     records, chosen=make_plan(rows,seller(),ref,NOW,{},hours=36)
     assert len(chosen)==1
@@ -42,14 +42,14 @@ def test_daily_snapshot_accepted_after_twenty_four_hours():
 
 
 def test_age_over_thirty_six_hours_rejected():
-    rows=[scan(hours_old=37,price=4000)]
+    rows=[scan(hours_old=37,price=3500)]
     records, chosen=make_plan(rows,seller(),{normalize_sku("2020C"):3900},NOW,{},hours=36)
     assert not chosen
     assert records[0]["reason"]=="STALE_BUYER_PRICE"
 
 
 def test_previous_run_prevents_duplicate_write():
-    rows=[scan(hours_old=12,price=4000)]
+    rows=[scan(hours_old=12,price=3500)]
     rec,chosen=make_plan(rows,seller(),{normalize_sku("2020C"):3900},NOW,{"777":{}},hours=36)
     assert not chosen
     assert rec[0]["reason"]=="PREVIOUS_BATCH_NOT_VERIFIED"
