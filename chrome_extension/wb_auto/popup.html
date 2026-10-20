@@ -6,6 +6,14 @@
     <input id="token" type="password" autocomplete="off" placeholder="Вставь токен WB один раз">
   </label>
   <p class="hint">Токен используется только для чтения списка товаров; расширение его не сохраняет.</p>
+  <label>Токен Content API (если отличается от основного)
+    <input id="contentToken" type="password" autocomplete="off" placeholder="Для проверки остатков FBS">
+  </label>
+  <label>Токен Marketplace API (если отличается от основного)
+    <input id="marketplaceToken" type="password" autocomplete="off" placeholder="Для проверки остатков FBS">
+  </label>
+  <label class="stockFilter"><input id="onlyStock" type="checkbox" checked> Пропускать товары без остатков FBS</label>
+  <p class="hint">Остатки FBS проверяются через Content + Marketplace API. Если общий токен имеет эти права, дополнительные поля не нужны. FBW — другой учёт остатков.</p>
   <label>Проверить товаров (0 = весь ассортимент)
     <input id="limit" type="number" min="0" max="100000" value="0">
   </label>
@@ -15,5 +23,5 @@
   <div id="numbers">Товаров: 0 · Проверено: 0 · Цен получено: 0</div>
   <progress id="progress" value="0" max="100"></progress>
   <button id="export" class="secondary">Скачать результаты в CSV</button>
-  <p class="hint">Не нужно вводить артикулы, выбирать город или вручную открывать товары. Одна вкладка WB переключается автоматически. Программа не меняет цены продавца.</p>
+  <p class="hint">Без ввода артикулов или выбора города. Контрольная цена — самая низкая видимая незачёркнутая цена. Изменение цен продавца отключено.</p>
 </main><script src="popup.js"></script></body></html>

@@ -48,6 +48,56 @@ async function readCatalog(token) {
   }
   return goods;
 }
+/* Official FBS-only stock prefilter; requires Marketplace and Content API permissions. */
+async function stockJson(url,token,body=null){
+ for(let retry=0;retry<3;retry++){
+  let res;
+  try{res=await fetch(url,{method:body===null?'GET':'POST',
+    headers:{Authorization:token,Accept:'application/json',...(body===null?{}:{'Content-Type':'application/json'})},
+    body:body===null?undefined:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(30000)});
+  }catch(e){if(retry<2){await delay((retry+1)*1000);continue;}throw e;}
+  if([429,500,502,503,504].includes(res.status)&&retry<2){await delay((retry+1)*2000);continue;}
+  if(!res.ok)throw Error('Остатки WB HTTP '+res.status+' ('+new URL(url).hostname+'). Нужны права Content и Marketplace API.');
+  return await res.json();
+ }
+ throw Error('Не удалось получить остатки WB');
+}
+async function filterFbsStock(goods,contentToken,marketplaceToken){
+ const selected=new Set(goods.map(x=>x.nm_id)),chartToNm=new Map();
+ let cursor={limit:100};
+ for(let page=0;page<300;page++){
+  const data=await stockJson('https://content-api.wildberries.ru/content/v2/get/cards/list',
+    contentToken,{settings:{cursor,filter:{withPhoto:-1}}});
+  if(!Array.isArray(data.cards))throw Error('Content API не вернул cards; отсев недоступен.');
+  for(const item of data.cards){
+   const nm=validateArticle(item.nmID);if(!selected.has(nm))continue;
+   for(const size of item.sizes||[]){const chart=validateArticle(size.chrtID);if(chart)chartToNm.set(chart,nm);}
+  }
+  if(data.cards.length<100)break;
+  if(!data.cursor?.updatedAt||!data.cursor?.nmID)throw Error('Content API: ошибка пагинации.');
+  cursor={limit:100,updatedAt:data.cursor.updatedAt,nmID:data.cursor.nmID};
+  if(page===299)throw Error('Слишком много страниц Content API.');
+ }
+ if(!chartToNm.size)throw Error('Не найдены размеры chrtID в Content API.');
+ const warehouses=await stockJson('https://marketplace-api.wildberries.ru/api/v3/warehouses',marketplaceToken);
+ if(!Array.isArray(warehouses)||!warehouses.length)throw Error('Нет складов FBS в Marketplace API; товары FBW этот фильтр не проверяет.');
+ const ids=[...chartToNm.keys()],qty=new Map();
+ for(const warehouse of warehouses){
+  const wid=Number(warehouse.id);if(!Number.isSafeInteger(wid))continue;
+  for(let i=0;i<ids.length;i+=1000){
+   const data=await stockJson('https://marketplace-api.wildberries.ru/api/v3/stocks/'+wid,marketplaceToken,
+     {chrtIds:ids.slice(i,i+1000)});
+   if(!Array.isArray(data.stocks))throw Error('Marketplace API: нет stocks');
+   for(const st of data.stocks){
+    const nm=chartToNm.get(Number(st.chrtId));if(!nm)continue;
+    qty.set(nm,(qty.get(nm)||0)+Math.max(0,Number(st.amount)||0));
+   }
+   if(i+1000<ids.length)await delay(350);
+  }
+ }
+ return goods.filter(x=>(qty.get(x.nm_id)||0)>0);
+}
+
 async function nextItem() {
   if (processing) return;
   processing=true;
@@ -84,10 +134,11 @@ async function recordPrice(nm,sender,payload) {
     if (!item || item.nm_id!==nm) return {ok:false};
     const result=payload.result;
     const valid=result && result.nm_id===nm && Number.isSafeInteger(result.public_price_rub)
-      && result.public_price_rub>0;
+      && result.public_price_rub>0 && Number.isSafeInteger(result.min_price_rub) && result.min_price_rub>0;
     const row={nm_id:nm,sku:item.sku,seller_base_rub:item.seller_base_rub,
       seller_discounted_rub:item.seller_discounted_rub,
       buyer_public_rub:valid?result.public_price_rub:null,
+      buyer_min_rub:valid?result.min_price_rub:null,
       buyer_wallet_rub:valid && Number.isSafeInteger(result.wallet_price_rub)?result.wallet_price_rub:null,
       read_status:valid?'OK':'ERROR',
       error:valid?'':String(payload.error || 'Не удалось подтвердить цену'),
@@ -110,23 +161,29 @@ async function recordPrice(nm,sender,payload) {
     return {ok:true};
   } finally {
     processing=false;
-    if (continuation) setTimeout(()=>nextItem(),5500);
+    if (continuation) setTimeout(()=>nextItem(),900);
   }
 }
 async function startScan(message) {
   if ((await stateGet()).running) throw new Error('Обход уже запущен.');
-  const goods=await readCatalog(message.token);
+  let goods=await readCatalog(message.token);
   if (!goods.length) throw new Error('Seller API не вернул ни одного артикула.');
+  const unfilteredCount=goods.length;
+  if(message.onlyStock!==false){
+    goods=await filterFbsStock(goods,String(message.contentToken||message.token||'').trim(),
+      String(message.marketplaceToken||message.token||'').trim());
+    if(!goods.length)throw Error('Нет товаров с положительным FBS-остатком. FBW не учитывается; для FBW отключи FBS-фильтр.');
+  }
   let limit=Number(message.limit);
   if (!Number.isSafeInteger(limit) || limit<=0) limit=goods.length;
   const items=goods.slice(0,limit);
   await chrome.storage.local.set({[ITEMS]:items,[ROWS]:[]});
   await stateSave({...INITIAL,running:true,status:'starting',index:0,total:items.length,
     started_at:Date.now(),updated_at:Date.now(),
-    message:'Получено '+goods.length+' артикулов через Seller API WB. Запускаем обход.'});
+    message:'Каталог: '+unfilteredCount+'. С остатком FBS: '+goods.length+'. Запускаем обход.'});
   await chrome.alarms.create(ALARM,{periodInMinutes:1});
   await nextItem();
-  return {catalog_total:goods.length,scan_count:items.length};
+  return {catalog_total:unfilteredCount,eligible_total:goods.length,scan_count:items.length};
 }
 async function stopScan() {
   const old=await stateGet();
