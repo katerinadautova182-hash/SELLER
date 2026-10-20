@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SELLER — мониторинг цен WB",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Получает артикулы продавца через официальный API Wildberries, проверяет витринные цены в обычном Chrome, выгружает CSV. Только чтение.",
   "permissions": ["tabs", "storage", "alarms", "downloads"],
   "host_permissions": ["https://discounts-prices-api.wildberries.ru/*", "https://www.wildberries.ru/*", "https://content-api.wildberries.ru/*", "https://marketplace-api.wildberries.ru/*"],
