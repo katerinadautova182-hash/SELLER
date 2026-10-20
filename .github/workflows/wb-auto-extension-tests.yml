@@ -1,0 +1,27 @@
+name: WB auto Chrome extension tests
+on:
+  push:
+    paths:
+      - "chrome_extension/wb_auto/**"
+      - "tests/test_wb_auto_core.mjs"
+      - ".github/workflows/wb-auto-extension-tests.yml"
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate syntax
+        run: |
+          node --check chrome_extension/wb_auto/background.js
+          node --check chrome_extension/wb_auto/content.js
+          node --check chrome_extension/wb_auto/price-core.js
+          node --check chrome_extension/wb_auto/popup.js
+          node -e "JSON.parse(require('fs').readFileSync('chrome_extension/wb_auto/manifest.json','utf8'))"
+      - name: Check price parsing
+        run: node --test tests/test_wb_auto_core.mjs

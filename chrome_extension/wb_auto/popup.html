@@ -1,0 +1,19 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SELLER WB — автоматический сбор</title><link rel="stylesheet" href="popup.css"></head>
+<body><main>
+  <h1>SELLER · Wildberries</h1>
+  <p class="muted">Все артикулы через Seller API → цены с карточек WB в обычном Chrome.</p>
+  <label>Токен API WB (категория «Цены и скидки»)
+    <input id="token" type="password" autocomplete="off" placeholder="Вставь токен WB один раз">
+  </label>
+  <p class="hint">Токен используется только для чтения списка товаров; расширение его не сохраняет.</p>
+  <label>Проверить товаров (0 = весь ассортимент)
+    <input id="limit" type="number" min="0" max="100000" value="0">
+  </label>
+  <button id="start">Начать автоматический сбор</button>
+  <button id="stop" class="secondary">Остановить</button>
+  <div id="status" role="status" aria-live="polite">Ожидание запуска.</div>
+  <div id="numbers">Товаров: 0 · Проверено: 0 · Цен получено: 0</div>
+  <progress id="progress" value="0" max="100"></progress>
+  <button id="export" class="secondary">Скачать результаты в CSV</button>
+  <p class="hint">Не нужно вводить артикулы, выбирать город или вручную открывать товары. Одна вкладка WB переключается автоматически. Программа не меняет цены продавца.</p>
+</main><script src="popup.js"></script></body></html>
