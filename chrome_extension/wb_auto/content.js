@@ -1,118 +1,82 @@
-/* Runs only on WB product cards. No token, no cookie access. */
+/* Observe prices in the real WB purchase block: minimal visible non-struck. */
 (() => {
-  'use strict';
-  const match = location.pathname.match(/^\/catalog\/(\d+)\/detail\.aspx/i);
-  if (!match) return;
-  const nmID = Number(match[1]);
-  let helloTries = 0;
-  const handshake = () => chrome.runtime.sendMessage({type: 'SCAN_PAGE_HELLO', nm_id: nmID}, response => {
-    if (chrome.runtime.lastError || !response?.authorized) {
-      if (++helloTries < 8) setTimeout(handshake, 1200);
-      return;
+ 'use strict';
+ const m=location.pathname.match(/^\/catalog\/(\d+)\/detail\.aspx/i);if(!m)return;
+ const id=Number(m[1]), core=globalThis.SellerWBPriceCore;if(!core)return;
+ const visible=el=>{if(!el||!el.getClientRects().length)return false;const s=getComputedStyle(el);return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0;};
+ const old=(el,scope)=>{
+  for(let p=el;p&&p!==scope.parentElement;p=p.parentElement){
+   const cls=typeof p.className==='string'?p.className:'';
+   if(/old.?price|price.?old|crossed|strike|strikethrough|line-through/i.test(cls)||['DEL','S','STRIKE'].includes(p.tagName)||getComputedStyle(p).textDecorationLine?.includes('line-through'))return true;
+  }
+  return false;
+ };
+ const priceCount=el=>(el.innerText||'').match(/\d[\d\s\u00a0\u202f]*\s*₽/g)?.length||0;
+ function scope(){
+  const buttons=[...document.querySelectorAll('button,[role="button"],a')].filter(el=>visible(el)&&/добавить в корзину|купить сейчас/i.test((el.innerText||el.textContent||'').trim()));
+  for(const btn of buttons){
+   const y=btn.getBoundingClientRect().top;
+   for(let p=btn.parentElement,d=0;p&&d<9;p=p.parentElement,d++){
+    if(!visible(p)||p===document.body)break;
+    const n=priceCount(p);if(n>=1&&n<=7&&(p.innerText||'').length<1200)return {panel:p,buttonY:y};
+   }
+  }
+  const blocks=[...document.querySelectorAll('[class*="productPrice"],[class*="priceBlock"],[class*="price-block"],[class*="product-price"],[class*="price__wrap"]')].filter(el=>visible(el)&&priceCount(el)>0&&priceCount(el)<=5&&(el.innerText||'').length<600);
+  blocks.sort((a,b)=>(priceCount(b)>1)-(priceCount(a)>1)||(a.innerText||'').length-(b.innerText||'').length);
+  return blocks.length?{panel:blocks[0],buttonY:Infinity}:null;
+ }
+ function read(){
+  const area=scope();if(!area)return null;
+  const found=[],seen=new Set();
+  const add=(el,text)=>{
+   if(!visible(el)||el.getBoundingClientRect().top>area.buttonY+10)return;
+   const price=core.asPrice(text);if(!price)return;
+   const isOld=old(el,area.panel),key=price+':'+isOld;if(seen.has(key))return;seen.add(key);
+   const classes=[el,el.parentElement].map(x=>typeof x?.className==='string'?x.className:'').join(' ');
+   const kind=/wallet|кошел|mo-typography_color_danger|mo-typography_color_accent/i.test(classes)?'wallet':/finalPrice|price-block__final-price/i.test(classes)?'regular':null;
+   found.push({price,old:isOld,kind});
+  };
+  const walker=document.createTreeWalker(area.panel,NodeFilter.SHOW_TEXT);
+  while(walker.nextNode()){
+   const node=walker.currentNode;
+   if(node.nodeValue?.length<=90&&/₽|руб/i.test(node.nodeValue))add(node.parentElement,node.nodeValue);
+  }
+  for(const el of area.panel.querySelectorAll('span,b,strong,ins,del,s,p,div')){
+   if(!visible(el))continue;
+   const text=(el.innerText||el.textContent||'').trim();
+   if(text.length>60||!text.includes('₽'))continue;
+   if(![...el.children].some(ch=>core.asPrice(ch.innerText||ch.textContent)))add(el,text);
+  }
+  const price=core.classify(found);
+  return price?.min_price_rub?{...price,nm_id:id,source:'wb_live_dom_min_price',checked_at:new Date().toISOString()}:null;
+ }
+ let retries=0;
+ function hello(){
+  chrome.runtime.sendMessage({type:'SCAN_PAGE_HELLO',nm_id:id},response=>{
+   if(chrome.runtime.lastError||!response?.authorized){if(++retries<=15)setTimeout(hello,250);return;}
+   let last='',stable=0,finished=false;const started=Date.now();
+   let timer;
+   const observer=new MutationObserver(()=>tick());
+   function finish(result,error){
+    if(finished)return;finished=true;observer.disconnect();clearInterval(timer);
+    chrome.runtime.sendMessage({type:'SCAN_PRICE_RESULT',nm_id:id,result,error},()=>void chrome.runtime.lastError);
+   }
+   function tick(){
+    if(finished)return;
+    const result=read();
+    if(result){
+     const key=JSON.stringify(result.display_prices_rub);
+     stable=last===key?stable+1:0;last=key;
+     if(stable>=1&&(result.display_prices_rub.length>=2||Date.now()-started>=1500)){finish(result,null);return;}
     }
-    const core = globalThis.SellerWBPriceCore;
-    if (!core) return;
-    const endAt = Date.now() + 28000;
-    let attempts = 0;
-    let previousSample = '';
-    let matchingSamples = 0;
-    const getVisible = el => {
-      if (!el || !el.getClientRects().length) return false;
-      const style = getComputedStyle(el);
-      return style.display !== 'none' && style.visibility !== 'hidden';
-    };
-    const isOld = el => {
-      for (let x = el, n = 0; x && n < 3; x = x.parentElement, n++) {
-        const cls = typeof x.className === 'string' ? x.className : '';
-        if (/oldPrice|old-price|price-old|crossed|strike|price__old/i.test(cls)) return true;
-        if (/line-through/.test(getComputedStyle(x).textDecorationLine)) return true;
-        if (['DEL', 'S', 'STRIKE'].includes(x.tagName)) return true;
-      }
-      return false;
-    };
-    function findPricePanel() {
-      const wrapSelectors = [
-        '[class*="productPrice"]', '[class*="priceBlock"]',
-        '[class*="price-block"]', '[class*="priceBlockPrice"]',
-        '[class*="product-price"]', '[class*="price__wrap"]'
-      ];
-      const candidates = [];
-      for (const selector of wrapSelectors) {
-        for (const el of document.querySelectorAll(selector)) {
-          if (!getVisible(el)) continue;
-          const txt = (el.innerText || '').slice(0, 700);
-          const nums = txt.match(/\d[\d\s\u00a0\u202f]*\s*₽/g) || [];
-          if (nums.length >= 1 && nums.length <= 7 && txt.length < 700) {
-            candidates.push({el, count: nums.length, length: txt.length});
-          }
-        }
-      }
-      candidates.sort((a, b) => {
-        const score = v => (v.count >= 2 ? 100 : 0) + (v.count <= 4 ? 20 : 0) - v.length / 100;
-        return score(b) - score(a);
-      });
-      if (candidates.length) return candidates[0].el;
-      const button = [...document.querySelectorAll('button,a')]
-        .find(el => /добавить в корзину/i.test((el.textContent || '').trim()));
-      if (!button) return null;
-      for (let p = button.parentElement, depth = 0; p && depth < 7; p = p.parentElement, depth++) {
-        const text = (p.innerText || '').slice(0, 2500);
-        if ((text.match(/\d[\d\s\u00a0\u202f]*\s*₽/g) || []).length >= 2) return p;
-      }
-      return null;
+    if(Date.now()-started>=9500){
+     const text=document.body?.innerText?.slice(0,1200)||'';
+     finish(null,/подозрительн|что-то не так|captcha|доступ ограничен/i.test(text)?'WB заблокировал страницу':'Цена не найдена за 9,5 секунды');
     }
-    function readPanel(panel) {
-      const matched = [];
-      const leaves = [panel, ...panel.querySelectorAll('span,b,strong,ins,del,s,p,div')];
-      for (const el of leaves) {
-        if (!getVisible(el)) continue;
-        const full = (el.innerText || el.textContent || '').trim();
-        if (!full || full.length > 55) continue;
-        const price = core.asPrice(full);
-        if (!price) continue;
-        const childrenWithPrice = [...el.children].some(child => core.asPrice((child.innerText || '').trim()) !== null);
-        if (childrenWithPrice) continue;
-        const cls = typeof el.className === 'string' ? el.className : '';
-        const parentCls = typeof el.parentElement?.className === 'string' ? el.parentElement.className : '';
-        const combined = cls + ' ' + parentCls;
-        const kind = /priceBlockFinalPrice|price-block__final-price/i.test(combined) ? 'regular'
-          : /priceBlockWalletPrice|wallet-price|mo-typography_color_danger|mo-typography_color_accent/i.test(combined)
-            ? 'wallet' : null;
-        matched.push({price, old: isOld(el), kind});
-      }
-      return core.classify(matched);
-    }
-    function extract() {
-      const panel = findPricePanel();
-      if (!panel) return null;
-      const data = readPanel(panel);
-      if (!data || !data.public_price_rub) return null;
-      return {...data, source: 'wb_live_dom', nm_id: nmID, url: location.href,
-        checked_at: new Date().toISOString()};
-    }
-    const tick = () => {
-      attempts++;
-      const result = extract();
-      if (result) {
-        const currentSample = JSON.stringify([result.public_price_rub, result.wallet_price_rub]);
-        matchingSamples = previousSample === currentSample ? matchingSamples + 1 : 0;
-        previousSample = currentSample;
-        if (matchingSamples < 2 || (result.wallet_price_rub === null && attempts < 7)) {
-          setTimeout(tick, 1250);
-          return;
-        }
-        chrome.runtime.sendMessage({type: 'SCAN_PRICE_RESULT', nm_id: nmID, result}, () => void chrome.runtime.lastError);
-        return;
-      }
-      if (Date.now() >= endAt) {
-        const denied = /подозрительн|не так|captcha|доступ ограничен/i.test(document.body?.innerText?.slice(0, 700) || '');
-        chrome.runtime.sendMessage({type: 'SCAN_PRICE_RESULT', nm_id: nmID,
-          error: denied ? 'WB заблокировал страницу' : 'Цена на карточке не найдена за 28 секунд'}, () => void chrome.runtime.lastError);
-        return;
-      }
-      setTimeout(tick, 1350);
-    };
-    setTimeout(tick, 900);
+   }
+   observer.observe(document.body||document.documentElement,{subtree:true,childList:true,characterData:true});
+   timer=setInterval(tick,300);tick();
   });
-  handshake();
+ }
+ hello();
 })();
