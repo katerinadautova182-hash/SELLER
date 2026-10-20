@@ -1,0 +1,53 @@
+name: WB verify submitted price task
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/wb-verify-task.yml"
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: "WB price upload task ID"
+        required: true
+        default: "156875122"
+        type: string
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      WB_API_KEY: ${{ secrets.WB_API_KEY }}
+      TASK_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.task_id || '156875122' }}
+    steps:
+      - name: Check WB task processing result (READ ONLY)
+        run: |
+          python - <<'PY'
+          import os, urllib.request, urllib.parse, json
+          task=os.environ['TASK_ID'].strip()
+          if not task.isdigit() or not os.environ.get('WB_API_KEY'):
+              raise SystemExit('Invalid task id or missing WB_API_KEY')
+          base="https://discounts-prices-api.wildberries.ru"
+          headers={"Authorization":os.environ['WB_API_KEY'],"Accept":"application/json"}
+          def get(path):
+              req=urllib.request.Request(base+path,headers=headers)
+              with urllib.request.urlopen(req,timeout=35) as res:
+                  return json.load(res)
+          try:
+              answer=get("/api/v2/history/tasks?"+urllib.parse.urlencode({"uploadID":task}))
+              data=answer.get("data")
+              print("Processed task:",json.dumps(data,ensure_ascii=False))
+              if isinstance(data,dict) and str(data.get("uploadID"))==task:
+                  overall=int(data.get("overAllGoodsNumber") or 0)
+                  success=int(data.get("successGoodsNumber") or 0)
+                  print(f"WB task {task}: processed; success {success}/{overall}")
+                  if overall and success<overall:
+                      print("Some SKU were rejected: inspect per-item task details and quarantine.")
+              else:
+                  print("WB history does not yet confirm processed task. Check buffer/queue.")
+          except Exception as e:
+              print("Task state not yet confirmed:",type(e).__name__,str(e)[:160])
+              raise
+          PY
