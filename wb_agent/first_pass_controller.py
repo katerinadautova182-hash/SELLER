@@ -289,7 +289,18 @@ def main(argv=None):
     report={"summary":summary,"rows":evaluated}
     output.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
     print(json.dumps(summary,ensure_ascii=False,indent=2),flush=True)
+    for r in chosen:
+        print(f"  {r['sku']} (WB {r['nm_id']}): покупатель "
+              f"{r['buyer_observed']} ₽; цель {r['ideal_buyer']} ₽; "
+              f"продавец {r['seller_before']} → {r['seller_proposed']} ₽ "
+              f"({r['delta_pct']:+.2f}%)",flush=True)
     if not args.apply or not chosen:
+        return 0
+    if not sys.stdin.isatty():
+        raise RuntimeError("First live upload requires interactive review on local PC")
+    print("Changes will be submitted ONCE. WB may quarantine some prices.")
+    if input('Для отправки в WB введите ПОДТВЕРЖДАЮ: ').strip() != 'ПОДТВЕРЖДАЮ':
+        print("Cancelled; NO WB price updates were sent.")
         return 0
     # Last-second preflight: refetch seller API, refuse any changed baseline.
     refreshed=catalog_by_id(token)
