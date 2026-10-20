@@ -85,3 +85,11 @@ def test_source_validation_prevents_fake_price():
     row["source"]="not_wb_source"
     with pytest.raises(ValueError):
         buyer_only(row)
+
+
+def test_unredacted_seller_prices_are_rejected_from_public_git_snapshot():
+    import pytest
+    row=scan()
+    row["seller_base_rub"]="10000"
+    with pytest.raises(ValueError, match="unredacted"):
+        buyer_only(row)
