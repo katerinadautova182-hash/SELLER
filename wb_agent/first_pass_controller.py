@@ -53,7 +53,10 @@ def posted(token, path, payload=None, method="GET"):
             with urllib.request.urlopen(request, timeout=35) as response:
                 result=json.load(response)
         except urllib.error.HTTPError as exc:
-            if exc.code in (429, 500, 502, 503, 504) and attempt+1<MAX_API_RETRIES:
+            # Never retry a price WRITE whose server-side result could
+            # already be committed. A failed confirmation is not license
+            # to submit another upload.
+            if method=="GET" and exc.code in (429, 500, 502, 503, 504) and attempt+1<MAX_API_RETRIES:
                 time.sleep(2+attempt*3)
                 continue
             raise RuntimeError("WB API HTTP "+str(exc.code)+": "+exc.read(180).decode("utf-8", errors="replace")) from None
@@ -295,6 +298,13 @@ def main(argv=None):
         base,reason=one_base(item or {})
         if base != row["seller_before"]:
             raise RuntimeError("SELLER_PRICE_CHANGED_PRE_WRITE: "+str(row["nm_id"]))
+        if item is None or any(
+            not cents_equal(size.get("discountedPrice"),
+                            next((r.get("seller_discounted_rub") for r in rows
+                                  if str(r.get("nm_id"))==str(row["nm_id"])),None))
+            for size in item.get("sizes") or []
+        ):
+            raise RuntimeError("SELLER_DISCOUNT_CHANGED_PRE_WRITE: "+str(row["nm_id"]))
     data=[{"nmID":int(r["nm_id"]),"price":int(r["seller_proposed"])} for r in chosen]
     # Persist attempts BEFORE sending POST to prevent an uncertain network timeout
     # from silently causing another price change on the next run.
