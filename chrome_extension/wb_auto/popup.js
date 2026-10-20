@@ -29,10 +29,7 @@ $('export').addEventListener('click', async () => {
   if (!rows.length) {status('Пока нет результатов для выгрузки.');return;}
   const keys = ['nm_id','sku','seller_base_rub','seller_discounted_rub','buyer_public_rub','buyer_wallet_rub','read_status','error','region','checked_at','source'];
   const cell = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
-  const csv = '﻿' + keys.join(';') + '
-' + rows.map(row => keys.map(k => cell(row[k])).join(';')).join('
-') + '
-';
+  const csv = '﻿' + keys.join(';') + '\r\n' + rows.map(row => keys.map(k => cell(row[k])).join(';')).join('\r\n') + '\r\n';
   const a = document.createElement('a');
   const url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
   a.href = url;
