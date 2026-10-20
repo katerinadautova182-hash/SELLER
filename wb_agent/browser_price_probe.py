@@ -12,9 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from decimal import Decimal, ROUND_FLOOR
+from decimal import Decimal
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, parse_qs
 
 from .buyer_price import (
     BuyerPriceUnavailable,
@@ -124,11 +124,15 @@ def main() -> None:
             diagnostics.append("Storefront: " + type(exc).__name__)
 
         try:
-            page.wait_for_timeout(2500)
+            page.wait_for_timeout(10000)
         except Exception:
             pass
 
         for url, data in responses:
+            # Do not confuse the browser's delivery region with Moscow.
+            card_dest = parse_qs(urlparse(url).query).get("dest", [None])[0]
+            if card_dest != args.dest:
+                continue
             try:
                 result = _extract_price(data, article, pct)
                 if result is not None:
