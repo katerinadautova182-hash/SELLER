@@ -16,9 +16,12 @@ $('start').addEventListener('click', async () => {
   $('start').disabled = true;
   status('Загружаю весь каталог из Seller API WB...');
   try {
-    const res = await chrome.runtime.sendMessage({type: 'SCAN_START', token, limit: Number($('limit').value)});
+    const res = await chrome.runtime.sendMessage({type: 'SCAN_START', token,
+      contentToken: $('contentToken').value.trim(),
+      marketplaceToken: $('marketplaceToken').value.trim(),
+      onlyStock: $('onlyStock').checked, limit: Number($('limit').value)});
     if (!res?.ok) throw Error(res?.error || 'Seller API не ответил.');
-    $('token').value = '';
+    $('token').value = ''; $('contentToken').value = ''; $('marketplaceToken').value = '';
     await refresh();
   } catch (err) {status('Ошибка: ' + err.message);}
   finally {$('start').disabled = false;}
@@ -27,7 +30,7 @@ $('stop').addEventListener('click', async () => {await chrome.runtime.sendMessag
 $('export').addEventListener('click', async () => {
   const {wb_auto_rows: rows = []} = await chrome.storage.local.get('wb_auto_rows');
   if (!rows.length) {status('Пока нет результатов для выгрузки.');return;}
-  const keys = ['nm_id','sku','seller_base_rub','seller_discounted_rub','buyer_public_rub','buyer_wallet_rub','read_status','error','region','checked_at','source'];
+  const keys = ['nm_id','sku','seller_base_rub','seller_discounted_rub','buyer_min_rub','buyer_public_rub','buyer_wallet_rub','read_status','error','region','checked_at','source'];
   const cell = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
   const csv = '﻿' + keys.join(';') + '\r\n' + rows.map(row => keys.map(k => cell(row[k])).join(';')).join('\r\n') + '\r\n';
   const a = document.createElement('a');
