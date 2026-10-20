@@ -31,6 +31,10 @@ ALLOWED_SOURCE = "wb_live_dom_min_price"
 def buyer_only(row):
     """Strict validation of a Git-tracked, PUBLIC snapshot row."""
     keys = set(row)
+    # A raw SELLER WB Auto export includes confidential seller price
+    # fields. Refuse unredacted files in the GitHub route.
+    if any(str(k).lower().startswith("seller_") for k in keys):
+        raise ValueError("Refuse unredacted seller-price columns in a public GitHub snapshot")
     if not EXPECTED_COLUMNS.issubset(keys):
         raise ValueError("Missing buyer-price snapshot columns")
     clean = {k: str(row.get(k) or "").strip() for k in EXPECTED_COLUMNS}
