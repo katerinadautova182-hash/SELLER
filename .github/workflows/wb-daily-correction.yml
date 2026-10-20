@@ -1,0 +1,66 @@
+name: WB daily buyer snapshot and bounded price correction
+
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - "data/wb_buyer_latest.csv"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Submit up to 30 capped price updates (unchecked = audit only)"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wb-daily-seller-price-first-pass
+  cancel-in-progress: false
+
+jobs:
+  compare-and-correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test runtime
+        run: python -m pip install -q pytest
+      - name: Validate correction controls
+        run: |
+          python -m pytest -q tests/test_wb_github_daily_correction.py tests/test_wb_first_pass_controller.py tests/test_wb_csv_rrp_control.py
+      - name: Restore previous submitted SKU ledger
+        uses: actions/cache/restore@v4
+        with:
+          path: .state/wb-first-pass-ledger.json
+          key: wb-daily-firstpass-ledger-${{ github.run_id }}
+          restore-keys: |
+            wb-daily-firstpass-ledger-
+      - name: Compare and submit controlled first pass
+        env:
+          WB_API_KEY: ${{ secrets.WB_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          WB_GITHUB_FIRST_PASS_APPROVED: "YES"
+          FIRSTPASS_APPLY: ${{ github.event_name == 'push' || inputs.apply }}
+        run: |
+          if [ -z "$WB_API_KEY" ] || [ -z "$RRP_MAP_B64" ]; then
+            echo "::error::GitHub secrets WB_API_KEY and RRP_MAP_B64 are required. No writes were made."
+            exit 2
+          fi
+          if [ "$FIRSTPASS_APPLY" = "true" ]; then
+            python -m wb_agent.github_daily_correction --csv data/wb_buyer_latest.csv --max-age-hours 36 --max-candidates 30 --max-step-pct 5 --apply
+          else
+            python -m wb_agent.github_daily_correction --csv data/wb_buyer_latest.csv --max-age-hours 36 --max-candidates 30 --max-step-pct 5
+          fi
+      - name: Preserve pending upload ledger between workflow runs
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .state/wb-first-pass-ledger.json
+          key: wb-daily-firstpass-ledger-${{ github.run_id }}
