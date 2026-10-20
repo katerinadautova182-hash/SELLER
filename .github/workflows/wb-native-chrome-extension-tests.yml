@@ -1,0 +1,25 @@
+name: WB native Chrome extension checks
+on:
+  push:
+    paths:
+      - "chrome_extension/wb_price/**"
+      - "tests/test_wb_chrome_core.mjs"
+      - ".github/workflows/wb-native-chrome-extension-tests.yml"
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate JS syntax
+        run: |
+          node --check chrome_extension/wb_price/core.mjs
+          node --check chrome_extension/wb_price/popup.js
+          node --check chrome_extension/wb_price/background.js
+      - name: Test buyer price parser without network
+        run: node --test tests/test_wb_chrome_core.mjs
