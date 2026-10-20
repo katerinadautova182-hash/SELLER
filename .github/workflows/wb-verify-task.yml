@@ -10,7 +10,7 @@ on:
       task_id:
         description: "WB price upload task ID"
         required: true
-        default: "156878139"
+        default: "156878405"
         type: string
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 5
     env:
       WB_API_KEY: ${{ secrets.WB_API_KEY }}
-      TASK_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.task_id || '156878139' }}
+      TASK_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.task_id || '156878405' }}
     steps:
       - name: Check WB task processing result (READ ONLY)
         run: |
