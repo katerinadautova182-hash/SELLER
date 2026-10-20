@@ -54,16 +54,25 @@
  function hello(){
   chrome.runtime.sendMessage({type:'SCAN_PAGE_HELLO',nm_id:id},response=>{
    if(chrome.runtime.lastError||!response?.authorized){if(++retries<=15)setTimeout(hello,250);return;}
-   let last='',stable=0,finished=false;const started=Date.now();
+   let last='',stable=0,finished=false,missingMatches=0;const started=Date.now();
    let timer;
    const observer=new MutationObserver(()=>tick());
-   function finish(result,error){
+   function finish(result,error,unavailable=false){
     if(finished)return;finished=true;observer.disconnect();clearInterval(timer);
-    chrome.runtime.sendMessage({type:'SCAN_PRICE_RESULT',nm_id:id,result,error},()=>void chrome.runtime.lastError);
+    chrome.runtime.sendMessage({type:'SCAN_PRICE_RESULT',nm_id:id,result,error,unavailable},()=>void chrome.runtime.lastError);
    }
    function tick(){
     if(finished)return;
     const result=read();
+    if(!result && Date.now()-started>=900){
+      const cartVisible=[...document.querySelectorAll('button,[role="button"],a')]
+        .some(el=>visible(el)&&/добавить в корзину|купить сейчас/i.test(el.innerText||el.textContent||''));
+      const text=(document.querySelector('main')?.innerText||document.body?.innerText||'').slice(0,4500);
+      const unavailable=Boolean(document.querySelector('h1'))&&!cartVisible&&
+        /нет в наличии|нет в продаже|товар закончился|товар распродан|товар временно недоступен|сообщить о поступлении|временно нет в продаже|раскупили/i.test(text);
+      missingMatches=unavailable?missingMatches+1:0;
+      if(missingMatches>=2){finish(null,null,true);return;}
+    }
     if(result){
      const key=JSON.stringify(result.display_prices_rub);
      stable=last===key?stable+1:0;last=key;
