@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -42,4 +43,14 @@ test('one visible price is valid without inventing wallet value', () => {
   const p = core.classify([{price: 8134, old: false},{price: 18000, old: true}]);
   assert.equal(p.min_price_rub, 8134);
   assert.equal(p.wallet_price_rub, null);
+});
+
+test('v0.4 actually handles unavailable products and persists minimum price', () => {
+ const bg=readFileSync(new URL('../chrome_extension/wb_auto/background.js',import.meta.url),'utf8');
+ const script=readFileSync(new URL('../chrome_extension/wb_auto/content.js',import.meta.url),'utf8');
+ assert.match(bg,/SKIP_OUT_OF_STOCK/);
+ assert.match(bg,/payload\.unavailable===true/);
+ assert.match(bg,/buyer_min_rub:valid\?result\.min_price_rub/);
+ assert.match(script,/missingMatches>=2/);
+ assert.match(script,/нет в наличии/);
 });
