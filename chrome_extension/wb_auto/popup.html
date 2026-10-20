@@ -12,8 +12,8 @@
   <label>Токен Marketplace API (если отличается от основного)
     <input id="marketplaceToken" type="password" autocomplete="off" placeholder="Для проверки остатков FBS">
   </label>
-  <label class="stockFilter"><input id="onlyStock" type="checkbox" checked> Пропускать товары без остатков FBS</label>
-  <p class="hint">Остатки FBS проверяются через Content + Marketplace API. Если общий токен имеет эти права, дополнительные поля не нужны. FBW — другой учёт остатков.</p>
+  <label class="stockFilter"><input id="onlyStock" type="checkbox"> Дополнительно фильтровать FBS (товары FBW не учитываются)</label>
+  <p class="hint">Этот предварительный фильтр исключает FBW и выключен по умолчанию. На самом сайте товар «нет в наличии» пропускается автоматически. FBS проверяются через Content + Marketplace API. Если общий токен имеет эти права, дополнительные поля не нужны. FBW — другой учёт остатков.</p>
   <label>Проверить товаров (0 = весь ассортимент)
     <input id="limit" type="number" min="0" max="100000" value="0">
   </label>
