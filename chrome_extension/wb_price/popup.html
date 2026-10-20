@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SELLER — цена WB</title><link rel="stylesheet" href="popup.css"></head>
+<body><main>
+<h1>SELLER · цена WB</h1>
+<p class="small">Бесплатная проверка покупательской цены, только чтение.</p>
+<label>Артикул WB <input id="article" inputmode="numeric" pattern="[0-9]+" value="1308438233"></label>
+<label>Кошелёк, % (расчётная цена при чтении API) <input id="wallet" type="number" min="0" max="99" step="0.1" value="3"></label>
+<button id="checkApi">1. Проверить API для Москвы</button>
+<div class="hr"></div>
+<p class="small">Если API не ответил, открой карточку в <b>обычном Chrome</b>, при желании войди на сайт WB и выбери доставку <b>Москва</b>.</p>
+<button class="secondary" id="openCard">2. Открыть карточку WB</button>
+<label class="check"><input id="confirmedMoscow" type="checkbox"> На открытой карточке выбран город <b>Москва</b></label>
+<button class="secondary" id="readPage">3. Считать обе цены с открытой карточки</button>
+<div id="status" role="status" aria-live="polite">Готов к проверке.</div>
+<section id="priceSection" hidden>
+<h2>Полученная цена</h2>
+<div class="priceRow"><span>Без WB Кошелька</span><b id="publicPrice">—</b></div>
+<div class="priceRow"><span>С WB Кошельком</span><b id="walletPrice">—</b></div>
+<p class="small" id="source"></p>
+<button id="exportCsv" class="secondary">Скачать CSV для SELLER</button>
+</section>
+<p class="foot">Не читает пароли, не использует API-ключ продавца и не изменяет цены.</p>
+</main><script type="module" src="popup.js"></script></body>
+</html>

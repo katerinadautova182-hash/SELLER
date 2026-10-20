@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "SELLER — цена Wildberries",
+  "version": "0.1.0",
+  "description": "Публичные цены WB для Москвы в обычном Chrome без автозапуска браузера",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://card.wb.ru/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SELLER — цена WB"
+  }
+}
