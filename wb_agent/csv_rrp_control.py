@@ -16,7 +16,7 @@ import csv
 import json
 import os
 from datetime import date, datetime
-from decimal import Decimal, ROUND_CEILING, InvalidOperation
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, InvalidOperation
 from pathlib import Path
 
 from ozon_agent.business_rules import (
@@ -108,6 +108,23 @@ def price_day(item, override=None):
         return datetime.now(MOSCOW).date()
 
 
+def high_markup_level(buyer: Decimal | None, applied_rrp: float | None) -> str:
+    """Price anomaly rules for non-promo and promotional items.
+
+    Above RRP 1500: flag strictly over 30%.
+    RRP <= 1500: flag strictly over 50%; urgent strictly over 70%.
+    Never treats this alert as an automatic authorization to lower prices.
+    """
+    if buyer is None or applied_rrp is None or applied_rrp <= 0:
+        return ""
+    base = Decimal(str(applied_rrp))
+    if base > 1500:
+        return "REVIEW" if buyer > base * Decimal("1.30") else ""
+    if buyer > base * Decimal("1.70"):
+        return "URGENT"
+    return "REVIEW" if buyer > base * Decimal("1.50") else ""
+
+
 def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
     output = []
     for item in rows:
@@ -134,6 +151,28 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
             status = "YELLOW"
         else:
             status = "OK"
+        # The old RED/YELLOW/OK zone is a LOWER-bound classification.
+        # Upper-bound anomalies are separate: normal-price markup warnings
+        # and a strict promotional target (effective RRP + 5%).
+        markup_pct = (
+            float(((buyer / Decimal(str(applied)) - 1) * 100).quantize(Decimal("0.01")))
+            if buyer is not None and applied is not None and applied > 0 else None
+        )
+        high_level = high_markup_level(buyer, applied) if status == "OK" else ""
+        promo_over_target = bool(
+            status == "OK" and is_promo and buyer is not None
+            and target is not None and buyer > Decimal(target)
+        )
+        if promo_over_target:
+            upper_zone = "PROMO_ABOVE_TARGET"
+        elif high_level == "URGENT":
+            upper_zone = "HIGH_MARKUP_URGENT"
+        elif high_level == "REVIEW":
+            upper_zone = "HIGH_MARKUP_REVIEW"
+        else:
+            upper_zone = "NORMAL"
+        control_status = upper_zone if status == "OK" and upper_zone != "NORMAL" else status
+
         proposed = None
         change_pct = None
         action = ""
@@ -155,13 +194,32 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
                     action = "NO_ACTION"
                 else:
                     action = "PROPOSE_UPWARD_CHANGE"
+        elif status == "OK" and promo_over_target:
+            # Estimate ONLY, never authorize an automatic write. A change to
+            # seller base may not scale buyer price linearly under WB promotions.
+            action = "REVIEW_PROMO_OVER_TARGET"
+            if base_price is not None and buyer is not None:
+                estimated = (base_price * Decimal(target) / buyer).quantize(
+                    Decimal("1"), rounding=ROUND_FLOOR)
+                if estimated > 0 and estimated < base_price:
+                    proposed = int(estimated)
+                    change_pct = float((estimated / base_price - 1) * 100)
+        elif status == "OK" and high_level:
+            action = "REVIEW_HIGH_MARKUP_" + high_level
         elif status != "OK":
             action = "SKIP_" + status
         result = {**item, "analysis_day":day.isoformat(), "rrp_regular":regular,
             "rrp_applied":applied, "promo_rrp_active":is_promo, "rrp_rule":rr_rule,
             "rrp_plus_5":target, "buyer_price":float(buyer) if buyer else None,
-            "zone":status, "gap_to_floor":max(0, target - float(buyer)) if buyer and target else None,
-            "seller_price_proposed":proposed, "seller_increase_pct":round(change_pct, 2) if change_pct is not None else None,
+            "zone":status, "control_status":control_status, "upper_zone":upper_zone,
+            "markup_over_applied_rrp_pct":markup_pct,
+            "high_markup_level":high_level,
+            "promo_over_target":promo_over_target,
+            "promo_excess_rub":max(0, float(buyer) - target) if promo_over_target else None,
+            "gap_to_floor":max(0, target - float(buyer)) if buyer and target else None,
+            "seller_price_proposed":proposed,
+            "seller_increase_pct":round(change_pct, 2) if change_pct is not None and change_pct > 0 else None,
+            "seller_change_pct":round(change_pct, 2) if change_pct is not None else None,
             "action":action, "apply":False}
         output.append(result)
     return output
@@ -194,6 +252,15 @@ def main():
         "zones":{name:sum(row["zone"] == name for row in result)
                  for name in ("RED","YELLOW","OK","NO_BUYER_PRICE","NO_STOCK","NO_RRP","CLEARANCE")},
         "promotional_rrp_rows":sum(row["promo_rrp_active"] for row in result),
+        "upper_price_alerts":{
+            "promo_above_target":sum(row["upper_zone"] == "PROMO_ABOVE_TARGET" for row in result),
+            "high_markup_review":sum(row["upper_zone"] == "HIGH_MARKUP_REVIEW" for row in result),
+            "high_markup_urgent":sum(row["upper_zone"] == "HIGH_MARKUP_URGENT" for row in result),
+        },
+        "high_markup_regardless_of_promo":{
+            "review":sum(row["high_markup_level"] == "REVIEW" for row in result),
+            "urgent":sum(row["high_markup_level"] == "URGENT" for row in result),
+        },
         "proposed":sum(row["action"] == "PROPOSE_UPWARD_CHANGE" for row in result),
         "manual_review":sum(row["action"] == "REVIEW_STEP_TOO_LARGE" for row in result),
         "input":str(args.input_csv),"result":str(destination)}
