@@ -28,3 +28,18 @@ test('old-only and empty returns null', () => {
   assert.equal(core.classify([{price: 18000, old: true, kind: null}]), null);
   assert.equal(core.classify([]), null);
 });
+
+test('lowest non-struck price wins even when WB changes markup classes', () => {
+  const p = core.classify([
+    {price: 8134, old: false, kind: null},
+    {price: 8386, old: false, kind: null},
+    {price: 18000, old: true, kind: null}
+  ]);
+  assert.equal(p.min_price_rub, 8134);
+  assert.equal(p.public_price_rub, 8386);
+});
+test('one visible price is valid without inventing wallet value', () => {
+  const p = core.classify([{price: 8134, old: false},{price: 18000, old: true}]);
+  assert.equal(p.min_price_rub, 8134);
+  assert.equal(p.wallet_price_rub, null);
+});
