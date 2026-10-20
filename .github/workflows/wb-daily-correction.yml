@@ -6,6 +6,7 @@ on:
       - claude/ozon-seller-product-export-nubra0
     paths:
       - "data/wb_buyer_latest.csv"
+      - "data/wb_continue_batch.txt"
   workflow_dispatch:
     inputs:
       apply:
@@ -48,9 +49,14 @@ jobs:
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
           WB_GITHUB_FIRST_PASS_APPROVED: "YES"
           FIRSTPASS_APPLY: ${{ github.event_name == 'push' || inputs.apply }}
+          REQUIRE_PREVIOUS_LEDGER: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[continue-wb]') }}
         run: |
           if [ -z "$WB_API_KEY" ] || [ -z "$RRP_MAP_B64" ]; then
             echo "::error::GitHub secrets WB_API_KEY and RRP_MAP_B64 are required. No writes were made."
+            exit 2
+          fi
+          if [ "$REQUIRE_PREVIOUS_LEDGER" = "true" ] && [ ! -s ".state/wb-first-pass-ledger.json" ]; then
+            echo "::error::Continuation cannot start without the previous submitted SKU ledger. No writes made."
             exit 2
           fi
           if [ "$FIRSTPASS_APPLY" = "true" ]; then
