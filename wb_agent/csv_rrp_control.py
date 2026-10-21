@@ -136,7 +136,7 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
         target = ceiling(Decimal(str(applied)) * Decimal("1.05")) if applied is not None else None
         tolerance_floor = ceiling(Decimal(str(applied)) * Decimal("1.02")) if applied is not None else None
         tolerance_ceiling = (
-            int((Decimal(str(applied)) * (Decimal("1.70") if applied <= 1500 else Decimal("1.08")))
+            int((Decimal(str(applied)) * (Decimal("2.00") if applied <= 1500 else Decimal("1.08")))
                 .quantize(Decimal("1"), rounding=ROUND_FLOOR))
             if applied is not None else None
         )
@@ -217,7 +217,7 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
                 if estimated > 0 and estimated < base_price:
                     proposed = int(estimated)
                     change_pct = float((estimated / base_price - 1) * 100)
-        elif control_status == "CHEAP_ABOVE_170_PCT_RRP":
+        elif control_status == "CHEAP_ABOVE_200_PCT_RRP":
             action = "REVIEW_CHEAP_ABOVE_LIMIT"
         elif status == "OK" and high_level:
             action = "REVIEW_HIGH_MARKUP_" + high_level
