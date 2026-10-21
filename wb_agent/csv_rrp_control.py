@@ -112,7 +112,7 @@ def high_markup_level(buyer: Decimal | None, applied_rrp: float | None) -> str:
     """Price anomaly rules for non-promo and promotional items.
 
     Above RRP 1500: flag strictly over 30%.
-    RRP <= 1500: up to +70% is allowed; review strictly over +70%.
+    RRP <= 1500: up to +100% is allowed; review strictly over +100%.
     Never treats this alert as an automatic authorization to lower prices.
     """
     if buyer is None or applied_rrp is None or applied_rrp <= 0:
@@ -120,7 +120,7 @@ def high_markup_level(buyer: Decimal | None, applied_rrp: float | None) -> str:
     base = Decimal(str(applied_rrp))
     if base > 1500:
         return "REVIEW" if buyer > base * Decimal("1.30") else ""
-    return "URGENT" if buyer > base * Decimal("1.70") else ""
+    return "URGENT" if buyer > base * Decimal("2.00") else ""
 
 
 def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
@@ -182,7 +182,7 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
             elif buyer < tolerance_floor:
                 control_status = "BELOW_TOLERANCE"
             elif applied <= 1500 and buyer > tolerance_ceiling:
-                control_status = "CHEAP_ABOVE_170_PCT_RRP"
+                control_status = "CHEAP_ABOVE_200_PCT_RRP"
             elif not is_promo and buyer > tolerance_ceiling:
                 control_status = "HIGH_MARKUP_REVIEW" if high_level else "ABOVE_TOLERANCE"
 
