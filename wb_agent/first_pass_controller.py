@@ -171,20 +171,20 @@ def propose(row, item, rrp_map, now, *, max_age_minutes=MAX_AGE_MINUTES,
         buyer_base_coeff=round(float(buyer/Decimal(base)),5),
         rrp_match_rule=rrp_rule)
 
-    # Owner policy: low-RRP goods may sell as high as 170% of their
+    # Owner policy: low-RRP goods may sell as high as 200% of their
     # effective RRP, including during the promotional period. Do NOT lower
     # their price just to force them into the generic +5% (+/-3%) corridor.
     if applied <= 1500:
-        cheap_high=(applied*Decimal("1.70")).quantize(
+        cheap_high=(applied*Decimal("2.00")).quantize(
             Decimal("1"),rounding=ROUND_FLOOR)
         result["max_allowed"]=int(cheap_high)
-        result["pricing_policy"]="CHEAP_UP_TO_170_PCT_RRP"
+        result["pricing_policy"]="CHEAP_UP_TO_200_PCT_RRP"
         if low <= buyer <= cheap_high:
             result["status"]="OK";result["reason"]="WITHIN_CHEAP_PRICE_BAND"
             return result
         if buyer > cheap_high:
             result["status"]="MANUAL_REVIEW"
-            result["reason"]="CHEAP_ABOVE_170_PCT_RRP"
+            result["reason"]="CHEAP_ABOVE_200_PCT_RRP"
             return result
     elif low <= buyer <= high:
         result["status"]="OK";return result
@@ -196,9 +196,9 @@ def propose(row, item, rrp_map, now, *, max_age_minutes=MAX_AGE_MINUTES,
 
     if buyer>high:
         markup=(buyer/applied-1)*100
-        # For >1500 RRP, mark >30% for review rather than blind discounts.
-        if regular==active and (
-                (applied>1500 and markup>30)):
+        # Above +30% of the *effective* RRP always requires approval,
+        # including an active promotional RRP; never auto-reduce it.
+        if applied>1500 and markup>30:
             result["status"]="MANUAL_REVIEW"
             result["reason"]="HIGH_MARKUP"
             result["markup_pct"]=round(float(markup),2)
