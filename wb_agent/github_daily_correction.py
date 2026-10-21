@@ -88,9 +88,58 @@ def enrich(row, current):
     return copy
 
 
+def confirmed_upload_tasks(ledger, token):
+    """Verify completed WB history entries BEFORE releasing any prior nmID.
+
+    WB 3 is processed; require entire task processed with success count equal
+    to the task's size. Missing, incomplete or errored tasks remain locked.
+    """
+    task_ids = set()
+    for entry in ledger.values():
+        if isinstance(entry, dict) and entry.get("state") == "SUBMITTED_PENDING_VERIFICATION":
+            try:
+                ident = int(entry.get("upload_id"))
+                if ident > 0:
+                    task_ids.add(ident)
+            except (TypeError, ValueError):
+                pass
+    confirmed = set()
+    for task_id in sorted(task_ids):
+        query = urllib.parse.urlencode({"uploadID": task_id})
+        try:
+            result = posted(token, "/api/v2/history/tasks?" + query)
+            task = result.get("data") or {}
+            total = int(task.get("overAllGoodsNumber") or 0)
+            success = int(task.get("successGoodsNumber") or -1)
+            if (int(task.get("uploadID") or 0) == task_id
+                    and int(task.get("status") or 0) == 3
+                    and total > 0 and success == total):
+                confirmed.add(task_id)
+        except (ValueError, TypeError, RuntimeError):
+            # A history read failure must NEVER unlock an unverified task.
+            pass
+    return confirmed
+
+
+def may_revisit_after_verified_upload(row, ledger_entry, confirmed_tasks):
+    """Allow only a newer buyer scan following a fully successful WB task."""
+    if not isinstance(ledger_entry, dict):
+        return False
+    if ledger_entry.get("state") != "SUBMITTED_PENDING_VERIFICATION":
+        return False
+    try:
+        task_id = int(ledger_entry["upload_id"])
+        prior = datetime.fromisoformat(str(ledger_entry["at"]).replace("Z", "+00:00"))
+        scanned = datetime.fromisoformat(str(row["checked_at"]).replace("Z", "+00:00"))
+        return (task_id in confirmed_tasks and prior.tzinfo is not None
+                and scanned.tzinfo is not None and scanned > prior)
+    except (ValueError, TypeError, KeyError):
+        return False
+
+
 def make_plan(rows, catalog, rrp, now, ledger, *,
               hours=MAX_DAILY_HOURS, max_step_pct=Decimal("5"),
-              max_candidates=MAX_DAILY_SKUS):
+              max_candidates=MAX_DAILY_SKUS, confirmed_tasks=None):
     evaluated = []
     for row in rows:
         nm = int(row["nm_id"])
@@ -102,8 +151,13 @@ def make_plan(rows, catalog, rrp, now, ledger, *,
         candidate = propose(enriched, catalog, rrp, now,
             max_age_minutes=hours * 60, max_change_pct=max_step_pct)
         if candidate.get("status") in {"READY", "MANUAL_REVIEW"} and str(nm) in ledger:
-            candidate["status"] = "SKIP"
-            candidate["reason"] = "PREVIOUS_BATCH_NOT_VERIFIED"
+            # A previous correction may be revisited only when the browser
+            # captured a newer price AND official WB history confirms that
+            # every item in the previous task was processed successfully.
+            if not may_revisit_after_verified_upload(
+                    row, ledger[str(nm)], confirmed_tasks or set()):
+                candidate["status"] = "SKIP"
+                candidate["reason"] = "PREVIOUS_BATCH_NOT_VERIFIED"
         evaluated.append(candidate)
     ready = [r for r in evaluated if r.get("status") == "READY"]
     ready.sort(key=lambda r: (
@@ -208,11 +262,17 @@ def main(argv=None):
         raise RuntimeError("WB_API_KEY GitHub secret is missing; no writes made")
     catalog = catalog_by_id(token)
     ledger = read_ledger()
+    confirmed_tasks = confirmed_upload_tasks(ledger, token)
+    print(json.dumps({"prior_tasks_confirmed": len(confirmed_tasks),
+                      "ledger_entries": len(ledger),
+                      "last_snapshot_day": max(row["checked_at"][:10] for row in rows)}),
+          flush=True)
     evaluated, chosen = make_plan(
         rows, catalog, rrp, datetime.now(timezone.utc), ledger,
         hours=args.max_age_hours,
         max_step_pct=Decimal(str(args.max_step_pct)),
-        max_candidates=args.max_candidates)
+        max_candidates=args.max_candidates,
+        confirmed_tasks=confirmed_tasks)
     report = scrub_report(evaluated, chosen, mode="APPLY" if args.apply else "DRY_RUN")
     print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
     # Owner approves large markups separately. Do not include RRP reference or

@@ -4,7 +4,8 @@ from decimal import Decimal
 from ozon_agent.catalog import normalize_sku
 from wb_agent.github_daily_correction import (
     buyer_only, load_public_snapshot, enrich, make_plan, scrub_report,
-    approval_items, approval_messages
+    approval_items, approval_messages, may_revisit_after_verified_upload,
+    confirmed_upload_tasks
 )
 
 NOW = datetime(2026, 10, 20, 15, tzinfo=timezone.utc)
@@ -134,4 +135,61 @@ def test_promo_expensive_markup_also_requires_approval():
     assert not chosen
     assert rows[0]["status"]=="MANUAL_REVIEW"
     assert rows[0]["rrp_active"]==9299
+    assert len(approval_items(rows))==1
+
+
+def test_previous_sku_released_only_when_today_scan_is_newer_and_api_task_confirmed():
+    old={"at":(NOW-timedelta(hours=30)).isoformat(),
+         "state":"SUBMITTED_PENDING_VERIFICATION","upload_id":156875122}
+    r=scan(hours_old=24,price=3500)
+    assert may_revisit_after_verified_upload(r,old,{156875122})
+    result,chosen=make_plan([r],seller(),
+         {normalize_sku("2020C"):3900},NOW,{"777":old},
+         hours=36,confirmed_tasks={156875122})
+    assert len(chosen)==1
+    assert result[0]["status"]=="READY"
+
+
+def test_second_pass_blocked_when_task_not_verified_or_scan_not_newer():
+    old={"at":(NOW-timedelta(hours=18)).isoformat(),
+         "state":"SUBMITTED_PENDING_VERIFICATION","upload_id":156875122}
+    r=scan(hours_old=24,price=3500)
+    assert not may_revisit_after_verified_upload(r,old,{156875122})
+    assert not may_revisit_after_verified_upload(scan(hours_old=12),old,set())
+    rec,chosen=make_plan([r],seller(),
+         {normalize_sku("2020C"):3900},NOW,{"777":old},
+         hours=36,confirmed_tasks={156875122})
+    assert not chosen
+    assert rec[0]["reason"]=="PREVIOUS_BATCH_NOT_VERIFIED"
+
+
+def test_history_task_must_have_full_success_and_correct_identity(monkeypatch):
+    old={"777":{"at":(NOW-timedelta(hours=30)).isoformat(),
+         "state":"SUBMITTED_PENDING_VERIFICATION","upload_id":156875122}}
+    import wb_agent.github_daily_correction as module
+    good={"data":{"uploadID":156875122,"status":3,
+          "overAllGoodsNumber":30,"successGoodsNumber":30}}
+    monkeypatch.setattr(module,"posted",lambda *_:good)
+    assert module.confirmed_upload_tasks(old,"not-real-token")=={156875122}
+    for bad in [
+        {"data":{"uploadID":156875122,"status":2,
+              "overAllGoodsNumber":30,"successGoodsNumber":30}},
+        {"data":{"uploadID":156875122,"status":3,
+              "overAllGoodsNumber":30,"successGoodsNumber":29}},
+        {"data":{"uploadID":156875123,"status":3,
+              "overAllGoodsNumber":30,"successGoodsNumber":30}},
+    ]:
+        monkeypatch.setattr(module,"posted",lambda *args,bad=bad:bad)
+        assert module.confirmed_upload_tasks(old,"not-real-token")==set()
+
+
+def test_already_updated_expensive_sku_requires_approval_after_new_scan():
+    old={"at":(NOW-timedelta(hours=30)).isoformat(),
+         "state":"SUBMITTED_PENDING_VERIFICATION","upload_id":156875122}
+    rows, chosen=make_plan(
+        [scan(sku="2020C",price=4200)],seller(),
+        {normalize_sku("2020C"):3000.0},NOW,
+        {"777":old},hours=36,confirmed_tasks={156875122})
+    assert not chosen
+    assert rows[0]["status"]=="MANUAL_REVIEW"
     assert len(approval_items(rows))==1
