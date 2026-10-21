@@ -10,6 +10,8 @@ import argparse
 import csv
 import json
 import os
+import urllib.request
+import urllib.parse
 from collections import Counter
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -99,7 +101,7 @@ def make_plan(rows, catalog, rrp, now, ledger, *,
         # up to 36 hours old as explicitly requested by the seller.
         candidate = propose(enriched, catalog, rrp, now,
             max_age_minutes=hours * 60, max_change_pct=max_step_pct)
-        if candidate.get("status") == "READY" and str(nm) in ledger:
+        if candidate.get("status") in {"READY", "MANUAL_REVIEW"} and str(nm) in ledger:
             candidate["status"] = "SKIP"
             candidate["reason"] = "PREVIOUS_BATCH_NOT_VERIFIED"
         evaluated.append(candidate)
@@ -124,6 +126,64 @@ def scrub_report(evaluated, chosen, *, mode, upload_id=None):
         "upload_task_id": upload_id,
         "note": "Upload task accepted is NOT verification of published buyer price"
     }
+
+
+def approval_items(evaluated):
+    """Only never-modified items. Prior submissions are suppressed by make_plan."""
+    rows = [r for r in evaluated if r.get("status") == "MANUAL_REVIEW"
+            and r.get("reason") in {"HIGH_MARKUP", "CHEAP_ABOVE_200_PCT_RRP"}
+            and r.get("rrp_active") is not None and r.get("buyer_observed") is not None]
+    return sorted(rows, key=lambda r: (
+        r.get("reason") != "HIGH_MARKUP",
+        -(r["buyer_observed"] / r["rrp_active"] - 1),
+        str(r.get("sku") or "")))
+
+
+def approval_messages(evaluated):
+    """Private message text only; avoid printing RRP/seller prices to public logs."""
+    rows = approval_items(evaluated)
+    if not rows:
+        return []
+    lines = ["WB — согласование завышенных цен (запись заблокирована)",
+             f"К согласованию: {len(rows)} товаров.",
+             "Порог: РРЦ >1500 ₽, цена >130% РРЦ; до 1500 ₽ — цена >200% РРЦ.",
+             "РРЦ акционная там, где она действует.", ""]
+    blocks = []
+    current = "\n".join(lines) + "\n"
+    for r in rows:
+        over = round((r["buyer_observed"] / r["rrp_active"] - 1) * 100, 1)
+        line = (f"{r['sku']} (WB {r['nm_id']}): "
+                f"РРЦ {r['rrp_active']:,.0f} ₽, "
+                f"покупатель {r['buyer_observed']:,.0f} ₽, +{over}%\n")
+        if len(current) + len(line) > 3600:
+            blocks.append(current)
+            current = "WB — согласование (продолжение)\n"
+        current += line
+    if current.strip():
+        blocks.append(current)
+    return blocks
+
+
+def send_private_approvals(messages):
+    if not messages:
+        return False
+    token = os.getenv("TELEGRAM_WB_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_WB_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        print(f"Approval needed for {len(messages)} message(s); Telegram WB not configured.")
+        return False
+    for msg in messages:
+        body = urllib.parse.urlencode({"chat_id": chat_id,
+                "text": msg, "disable_web_page_preview": "true"}).encode("utf-8")
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=body, method="POST")
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            result = json.load(resp)
+        if not result.get("ok"):
+            raise RuntimeError("Telegram WB did not accept approval notification")
+    print(f"Private WB approval request sent: {len(messages)} message(s).")
+    return True
 
 
 def main(argv=None):
@@ -155,6 +215,9 @@ def main(argv=None):
         max_candidates=args.max_candidates)
     report = scrub_report(evaluated, chosen, mode="APPLY" if args.apply else "DRY_RUN")
     print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
+    # Owner approves large markups separately. Do not include RRP reference or
+    # secret seller prices in public GitHub logs; private Telegram only.
+    send_private_approvals(approval_messages(evaluated))
     if not args.apply or not chosen:
         return 0
     if os.getenv("WB_GITHUB_FIRST_PASS_APPROVED") != "YES":
