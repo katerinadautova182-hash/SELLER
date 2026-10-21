@@ -94,13 +94,13 @@ def test_cheap_rrp_inclusive_1500_and_markup_alert_bands():
     ref={normalize_sku("2020C"):1500.0}
     source=[
         source_row("2020C",2250),
-        source_row("2020C",2251),
         source_row("2020C",2550),
-        source_row("2020C",2551),
+        source_row("2020C",3000),
+        source_row("2020C",3001),
     ]
     rows=analyze(source,ref,as_of=date(2026,10,20))
     assert [x["control_status"] for x in rows]==[
-        "OK","OK","OK","CHEAP_ABOVE_170_PCT_RRP"
+        "OK","OK","OK","CHEAP_ABOVE_200_PCT_RRP"
     ]
     assert all(x["apply"] is False for x in rows)
 
@@ -143,17 +143,17 @@ def test_ordinary_nonpromo_price_within_30_no_change():
     assert result["action"]==""
 
 
-def test_promo_cheap_goods_allow_to_170_percent_even_above_plus_five():
+def test_promo_cheap_goods_allow_to_200_percent_even_above_plus_five():
     ref={normalize_sku("MS702"):1374.0}
-    upper=963 * 1.70
+    upper=963 * 2
     rows=analyze([
-      source_row("MS702",1637),
-      source_row("MS702",1638),
+      source_row("MS702",1926),
+      source_row("MS702",1927),
     ],ref,as_of=date(2026,10,20))
     assert rows[0]["rrp_applied"] == 963.0
-    assert rows[0]["allowed_buyer_max"] == 1637
+    assert rows[0]["allowed_buyer_max"] == 1926
     assert rows[0]["control_status"] == "OK"
     assert rows[0]["action"] == ""
-    assert rows[1]["control_status"] == "CHEAP_ABOVE_170_PCT_RRP"
+    assert rows[1]["control_status"] == "CHEAP_ABOVE_200_PCT_RRP"
     assert rows[1]["action"] == "REVIEW_PROMO_OVER_TARGET"
     assert all(row["apply"] is False for row in rows)
