@@ -20,43 +20,43 @@ def catalog(row):
                           "clubDiscount":0}]}}
 
 
-def test_cheap_goods_up_to_170_percent_allowed_no_reduction():
+def test_cheap_goods_up_to_200_percent_allowed_no_reduction():
     ref={normalize_sku("MS1014"):1000.0}
-    for price in [1050,1250,1500,1700]:
+    for price in [1050,1250,1500,2000]:
         row=snapshot(buyer=price)
         result=propose(row,catalog(row),ref,NOW)
         assert result["status"]=="OK"
         assert result["reason"]=="WITHIN_CHEAP_PRICE_BAND"
         assert result["seller_before"]==2000
-        assert result["max_allowed"]==1700
+        assert result["max_allowed"]==2000
         assert "seller_proposed" not in result
 
 
-def test_cheap_goods_above_170_manual_review_no_autolowering():
+def test_cheap_goods_above_200_manual_review_no_autolowering():
     ref={normalize_sku("MS1014"):1000.0}
-    row=snapshot(buyer=1701)
+    row=snapshot(buyer=2001)
     result=propose(row,catalog(row),ref,NOW)
     assert result["status"]=="MANUAL_REVIEW"
-    assert result["reason"]=="CHEAP_ABOVE_170_PCT_RRP"
+    assert result["reason"]=="CHEAP_ABOVE_200_PCT_RRP"
     assert "seller_proposed" not in result
     assert result["apply"] is False
 
 
 def test_cheap_promo_based_on_applied_rrp():
     ref={normalize_sku("MS702"):1374.0}
-    row=snapshot(sku="MS702",buyer=1637,base=2200,disc=2100)
+    row=snapshot(sku="MS702",buyer=1926,base=2200,disc=2100)
     result=propose(row,catalog(row),ref,NOW)
     assert result["rrp_active"]==963.0
-    assert result["max_allowed"]==1637
+    assert result["max_allowed"]==1926
     assert result["status"]=="OK"
 
 
-def test_cheap_promo_above_170_manual_review():
+def test_cheap_promo_above_200_manual_review():
     ref={normalize_sku("MS702"):1374.0}
-    row=snapshot(sku="MS702",buyer=1638,base=2200,disc=2100)
+    row=snapshot(sku="MS702",buyer=1927,base=2200,disc=2100)
     result=propose(row,catalog(row),ref,NOW)
     assert result["status"]=="MANUAL_REVIEW"
-    assert result["reason"]=="CHEAP_ABOVE_170_PCT_RRP"
+    assert result["reason"]=="CHEAP_ABOVE_200_PCT_RRP"
 
 
 def test_expensive_normal_band_and_capped_downward_step():
@@ -98,3 +98,14 @@ def test_unavailable_goods_and_missing_rrp_never_change():
     assert propose(row,catalog(row),ref,NOW)["reason"]=="NOT_VERIFIED_OR_OUT_OF_STOCK"
     row["read_status"]="OK"
     assert propose(row,catalog(row),{},NOW)["reason"]=="MISSING_RRP"
+
+
+def test_promo_above_30_percent_requires_owner_approval():
+    ref={normalize_sku("206"):13284.0}
+    row=snapshot(sku="206",buyer=15699,base=19500,disc=19500)
+    result=propose(row,catalog(row),ref,NOW)
+    assert result["rrp_active"]==9299.0
+    assert result["status"]=="MANUAL_REVIEW"
+    assert result["reason"]=="HIGH_MARKUP"
+    assert result["markup_pct"]>30
+    assert "seller_proposed" not in result

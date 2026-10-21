@@ -47,6 +47,8 @@ jobs:
         env:
           WB_API_KEY: ${{ secrets.WB_API_KEY }}
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_WB_BOT_TOKEN: ${{ secrets.TELEGRAM_WB_BOT_TOKEN }}
+          TELEGRAM_WB_CHAT_ID: ${{ secrets.TELEGRAM_WB_CHAT_ID }}
           WB_GITHUB_FIRST_PASS_APPROVED: "YES"
           FIRSTPASS_APPLY: ${{ github.event_name == 'push' || inputs.apply }}
           REQUIRE_PREVIOUS_LEDGER: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[continue-wb]') }}

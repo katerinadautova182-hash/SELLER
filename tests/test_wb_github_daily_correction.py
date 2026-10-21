@@ -3,7 +3,8 @@ from decimal import Decimal
 
 from ozon_agent.catalog import normalize_sku
 from wb_agent.github_daily_correction import (
-    buyer_only, load_public_snapshot, enrich, make_plan, scrub_report
+    buyer_only, load_public_snapshot, enrich, make_plan, scrub_report,
+    approval_items, approval_messages
 )
 
 NOW = datetime(2026, 10, 20, 15, tzinfo=timezone.utc)
@@ -55,7 +56,7 @@ def test_previous_run_prevents_duplicate_write():
     assert rec[0]["reason"]=="PREVIOUS_BATCH_NOT_VERIFIED"
 
 
-def test_cheap_under_170_percent_never_reduced():
+def test_cheap_under_200_percent_never_reduced():
     rows=[scan(sku="MS1014",price=1699)]
     rec, chosen=make_plan(rows,seller(sku="MS1014"),
         {normalize_sku("MS1014"):1000},NOW,{},hours=36)
@@ -93,3 +94,44 @@ def test_unredacted_seller_prices_are_rejected_from_public_git_snapshot():
     row["seller_base_rub"]="10000"
     with pytest.raises(ValueError, match="unredacted"):
         buyer_only(row)
+
+
+def test_cheap_two_times_is_allowed_but_above_requires_approval():
+    ref={normalize_sku("MS1014"):1000.0}
+    for price, status in [(2000,"OK"),(2001,"MANUAL_REVIEW")]:
+        rec, chosen=make_plan([scan(sku="MS1014",price=price)],
+            seller(sku="MS1014"),ref,NOW,{},hours=36)
+        assert rec[0]["status"] == status
+        assert not chosen
+
+
+def test_over_thirty_percent_expensive_requires_private_approval():
+    ref={normalize_sku("2020C"):3000.0}
+    r=scan(sku="2020C",price=4200)
+    rows, chosen=make_plan([r],seller(sku="2020C"),ref,NOW,{},hours=36)
+    assert not chosen
+    assert rows[0]["status"]=="MANUAL_REVIEW"
+    assert rows[0]["reason"]=="HIGH_MARKUP"
+    assert len(approval_items(rows))==1
+    msg=approval_messages(rows)[0]
+    assert "2020C" in msg and "30%" in msg
+    assert "10000" not in msg
+
+
+def test_already_changed_high_markup_skipped_from_approval():
+    ref={normalize_sku("2020C"):3000.0}
+    r=scan(sku="2020C",price=4200)
+    rows, chosen=make_plan([r],seller(sku="2020C"),ref,NOW,{"777":{"state":"SUBMITTED_PENDING_VERIFICATION"}},hours=36)
+    assert not chosen
+    assert rows[0]["reason"]=="PREVIOUS_BATCH_NOT_VERIFIED"
+    assert not approval_items(rows)
+
+
+def test_promo_expensive_markup_also_requires_approval():
+    ref={normalize_sku("206"):13284.0}
+    r=scan(sku="206",price=15699)
+    rows, chosen=make_plan([r],seller(sku="206",base=19500,discount_price=19500),ref,NOW,{},hours=36)
+    assert not chosen
+    assert rows[0]["status"]=="MANUAL_REVIEW"
+    assert rows[0]["rrp_active"]==9299
+    assert len(approval_items(rows))==1

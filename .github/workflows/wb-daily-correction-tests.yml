@@ -4,6 +4,8 @@ on:
     paths:
       - "wb_agent/github_daily_correction.py"
       - "wb_agent/first_pass_controller.py"
+      - "wb_agent/csv_rrp_control.py"
+      - "tests/test_wb_csv_rrp_control.py"
       - "tests/test_wb_github_daily_correction.py"
       - ".github/workflows/wb-daily-correction-tests.yml"
 permissions:

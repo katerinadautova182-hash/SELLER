@@ -112,7 +112,7 @@ def high_markup_level(buyer: Decimal | None, applied_rrp: float | None) -> str:
     """Price anomaly rules for non-promo and promotional items.
 
     Above RRP 1500: flag strictly over 30%.
-    RRP <= 1500: up to +70% is allowed; review strictly over +70%.
+    RRP <= 1500: up to +100% is allowed; review strictly over +100%.
     Never treats this alert as an automatic authorization to lower prices.
     """
     if buyer is None or applied_rrp is None or applied_rrp <= 0:
@@ -120,7 +120,7 @@ def high_markup_level(buyer: Decimal | None, applied_rrp: float | None) -> str:
     base = Decimal(str(applied_rrp))
     if base > 1500:
         return "REVIEW" if buyer > base * Decimal("1.30") else ""
-    return "URGENT" if buyer > base * Decimal("1.70") else ""
+    return "URGENT" if buyer > base * Decimal("2.00") else ""
 
 
 def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
@@ -136,7 +136,7 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
         target = ceiling(Decimal(str(applied)) * Decimal("1.05")) if applied is not None else None
         tolerance_floor = ceiling(Decimal(str(applied)) * Decimal("1.02")) if applied is not None else None
         tolerance_ceiling = (
-            int((Decimal(str(applied)) * (Decimal("1.70") if applied <= 1500 else Decimal("1.08")))
+            int((Decimal(str(applied)) * (Decimal("2.00") if applied <= 1500 else Decimal("1.08")))
                 .quantize(Decimal("1"), rounding=ROUND_FLOOR))
             if applied is not None else None
         )
@@ -182,7 +182,7 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
             elif buyer < tolerance_floor:
                 control_status = "BELOW_TOLERANCE"
             elif applied <= 1500 and buyer > tolerance_ceiling:
-                control_status = "CHEAP_ABOVE_170_PCT_RRP"
+                control_status = "CHEAP_ABOVE_200_PCT_RRP"
             elif not is_promo and buyer > tolerance_ceiling:
                 control_status = "HIGH_MARKUP_REVIEW" if high_level else "ABOVE_TOLERANCE"
 
@@ -217,7 +217,7 @@ def analyze(rows, rrp_map, *, as_of=None, max_step_pct=Decimal("5")):
                 if estimated > 0 and estimated < base_price:
                     proposed = int(estimated)
                     change_pct = float((estimated / base_price - 1) * 100)
-        elif control_status == "CHEAP_ABOVE_170_PCT_RRP":
+        elif control_status == "CHEAP_ABOVE_200_PCT_RRP":
             action = "REVIEW_CHEAP_ABOVE_LIMIT"
         elif status == "OK" and high_level:
             action = "REVIEW_HIGH_MARKUP_" + high_level

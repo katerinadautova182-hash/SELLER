@@ -1,0 +1,50 @@
+name: WB owner approvals recheck (no seller price uploads)
+
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/wb-owner-approval-recheck.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wb-daily-seller-price-first-pass
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -q pytest
+      - name: Verify new tolerance and approval rules
+        run: python -m pytest -q tests/test_wb_csv_rrp_control.py tests/test_wb_first_pass_controller.py tests/test_wb_github_daily_correction.py
+      - name: Restore 100 already-updated SKU ledger
+        uses: actions/cache/restore@v4
+        with:
+          path: .state/wb-first-pass-ledger.json
+          key: wb-daily-firstpass-ledger-${{ github.run_id }}
+          restore-keys: |
+            wb-daily-firstpass-ledger-
+      - name: Require previous correction ledger
+        run: |
+          if [ ! -s ".state/wb-first-pass-ledger.json" ]; then
+            echo "::error::Cannot recheck without previous corrections ledger."
+            exit 2
+          fi
+      - name: Recheck current prices and send manual approvals - READ ONLY
+        env:
+          WB_API_KEY: ${{ secrets.WB_API_KEY }}
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_WB_BOT_TOKEN: ${{ secrets.TELEGRAM_WB_BOT_TOKEN }}
+          TELEGRAM_WB_CHAT_ID: ${{ secrets.TELEGRAM_WB_CHAT_ID }}
+        run: |
+          python -m wb_agent.github_daily_correction --csv data/wb_buyer_latest.csv --max-age-hours 36 --max-candidates 30 --max-step-pct 5
