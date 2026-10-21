@@ -55,7 +55,7 @@ def test_previous_run_prevents_duplicate_write():
     assert rec[0]["reason"]=="PREVIOUS_BATCH_NOT_VERIFIED"
 
 
-def test_cheap_under_170_percent_never_reduced():
+def test_cheap_under_200_percent_never_reduced():
     rows=[scan(sku="MS1014",price=1699)]
     rec, chosen=make_plan(rows,seller(sku="MS1014"),
         {normalize_sku("MS1014"):1000},NOW,{},hours=36)
@@ -93,3 +93,12 @@ def test_unredacted_seller_prices_are_rejected_from_public_git_snapshot():
     row["seller_base_rub"]="10000"
     with pytest.raises(ValueError, match="unredacted"):
         buyer_only(row)
+
+
+def test_cheap_two_times_is_allowed_but_above_requires_approval():
+    ref={normalize_sku("MS1014"):1000.0}
+    for price, status in [(2000,"OK"),(2001,"MANUAL_REVIEW")]:
+        rec, chosen=make_plan([scan(sku="MS1014",price=price)],
+            seller(sku="MS1014"),ref,NOW,{},hours=36)
+        assert rec[0]["status"] == status
+        assert not chosen
