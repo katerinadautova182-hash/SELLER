@@ -1,5 +1,5 @@
-2026-10-20
-batch=4
+2026-10-21
+batch=2
 snapshot=data/wb_buyer_latest.csv
 use_saved_ledger=true
-previous_wb_task=156878139
+previous_task_157037357=30/30_processed
