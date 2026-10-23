@@ -19,6 +19,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from ozon_agent.telegram import send_telegram
+from .reference_rrp import validate_rrp_reference
 
 PRICE_RE = re.compile(r"(?<!\d)(\d{1,3}(?:[\s\u00a0\u202f.]?\d{3})+(?:[.,]\d{1,2})?|\d{3,6}(?:[.,]\d{1,2})?)\s*(?:₽|руб(?:\.|\b)|р\.)", re.I)
 OLD_MARKERS = ("old-price", "price-old", "old_price", "price_old", "oldprice",
@@ -55,31 +56,23 @@ def clean_code(s: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", s)
 
 
-def load_rrp() -> dict[str, dict]:
-    raw = os.getenv("RRP_MAP_B64", "").strip()
-    if not raw:
-        raise RuntimeError("Не настроен секрет RRP_MAP_B64; проверку не запускаем.")
-    try:
-        data = json.loads(base64.b64decode(raw, validate=True).decode("utf-8"))
-    except (ValueError, UnicodeError) as exc:
-        raise RuntimeError("RRP_MAP_B64 не содержит корректный base64 JSON") from exc
-    if not isinstance(data, dict):
-        raise ValueError("РРЦ должен быть JSON-словарём SKU -> число")
-    out = {}
-    for raw_sku, raw_price in data.items():
-        try:
-            price = float(str(raw_price).replace(" ", "").replace(",", "."))
-        except (ValueError, TypeError):
-            continue
-        if price <= 0:
-            continue
-        sku = clean_code(raw_sku)
-        if sku and sku not in out:
-            out[sku] = {"sku": str(raw_sku), "rrp": price}
-    if not out:
-        raise RuntimeError("RRP_MAP_B64 пустой или не содержит числовых РРЦ.")
-    return out
-
+def load_rrp(path: str | Path = "competitor_monitor/rrp_jrl.csv") -> dict[str, dict]:
+    """Read approved JRL retail prices from the repository CSV (never purchase costs)."""
+    result = {}
+    with open(path, encoding="utf-8-sig", newline="") as file:
+        for row in csv.DictReader(file):
+            sku = str(row.get("sku") or "").strip()
+            key = clean_code(sku)
+            try:
+                value = float(str(row.get("rrp") or "").replace(" ", "").replace(",", "."))
+            except ValueError as exc:
+                raise RuntimeError(f"Invalid JRL RRP for {sku}") from exc
+            if not sku or not key or value <= 0 or key in result:
+                raise RuntimeError(f"Invalid or duplicate JRL SKU: {sku}")
+            result[key] = {"sku": sku, "rrp": value}
+    if not result:
+        raise RuntimeError("Файл РРЦ JRL пустой")
+    return result
 
 # Product family is not the same as a spare part referencing that model.
 # Guard against e.g. "Зарядная подставка для JRL 2020C" matching 2020C.
@@ -316,6 +309,8 @@ def jsonld_records(soup, url: str, rrp: dict) -> list[dict]:
                 product_link = internal_url(url, str(obj.get("url") or "")) or url
                 if sku and not url_compatible(product_link, sku["sku"]):
                     sku = None
+                    if status == "MATCHED":
+                        status = "UNMATCHED_SKU"
                 results.append({"sku": sku["sku"] if sku else "", "name": name,
                                 "url": product_link, "price": None if status == "OUT_OF_STOCK" else price,
                                 "rrp": sku["rrp"] if sku else None,
@@ -423,7 +418,17 @@ def fetch_html(session: requests.Session, url: str) -> BeautifulSoup:
         raise ValueError(f"Не HTML: {url}")
     if len(resp.content) > 6_000_000:
         raise ValueError(f"Очень большая страница: {url}")
-    if re.search(r"captcha|проверка браузера|access denied|подтвердите.*робот", resp.text[:8000], re.I):
+    # Normal shop scripts may mention reCAPTCHA without blocking shopping.
+    # A genuine anti-bot challenge has a focused short HTML page or challenge title.
+    title_node = BeautifulSoup(resp.content[:25000], "html.parser").title
+    title_text = title_node.get_text(" ", strip=True) if title_node else ""
+    if (
+        re.search(r"access denied|проверка браузера|подтвердите.*робот", title_text, re.I)
+        or (
+            len(resp.content) < 12000
+            and re.search(r"капча|captcha|checking your browser|verify you are human", resp.text[:8000], re.I)
+        )
+    ):
         raise ValueError(f"Антибот или CAPTCHA: {url}")
     return BeautifulSoup(resp.content, "html.parser")
 
@@ -490,6 +495,8 @@ def scan_site(site: dict, rrp: dict, delay: float = 0.8) -> dict:
         rows.append(item)
     rows.sort(key=lambda x: (x["delta"], x["sku"]))
     return {"site": site["name"], "url": base,
+            "legal_entity": site.get("legal_entity"), "inn": site.get("inn"),
+            "verified": site.get("verified", False),
             "checked_at": datetime.now(timezone.utc).isoformat(),
             "pages_ok": pages_ok, "pages_attempted": len(visited), "errors": errors,
             "items": rows, "unresolved": unresolved,
@@ -503,7 +510,10 @@ def fmt(amount: float) -> str:
 def format_report(report: dict) -> str:
     v = report["violations"]
     name = report["site"]
-    lines = [f"JRL — {name}", f"Сайт: {report['url']}",
+    legal = report.get("legal_entity") or "Юрлицо не установлено"
+    if not report.get("verified", True):
+        legal += " (реквизиты требуют подтверждения)"
+    lines = [f"{report['url'].replace('https://', '').replace('http://', '').rstrip('/')} — {legal}",
              f"Товаров с подтверждённым SKU и ценой: {len(report['items'])}",
              f"Ниже РРЦ: {len(v)}",
              f"Проверено страниц: {report['pages_ok']}/{report['pages_attempted']}"]
@@ -529,9 +539,6 @@ def format_report(report: dict) -> str:
         else:
             lines.append("")
             lines.append("По сопоставленным товарам цен ниже РРЦ не обнаружено.")
-    if report["unresolved"]:
-        lines.append(f"Без надёжного сопоставления/цены: {len(report['unresolved'])} "
-                     f"наблюдений (CSV/JSON в артефактах).")
     if report["errors"]:
         lines.append(f"Пример ошибки: {report['errors'][0][:160]}")
     msg = "\n".join(lines)
@@ -558,12 +565,14 @@ def save_reports(folder: Path, reports: list[dict]) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--sites", default="competitor_monitor/sites.json")
+    ap.add_argument("--rrp", default="competitor_monitor/rrp_jrl.csv")
     ap.add_argument("--out", default="artifacts/jrl-competitors")
     ap.add_argument("--no-telegram", action="store_true")
     ap.add_argument("--delay", type=float, default=0.8)
     ap.add_argument("--max-products", type=int, default=None, help="Override per-site crawl limit for smoke tests")
     args = ap.parse_args()
-    rrp = load_rrp()
+    rrp = load_rrp(args.rrp)
+    validate_rrp_reference(rrp)
     config = json.loads(Path(args.sites).read_text(encoding="utf-8"))
     reports = []
     for site in config["sites"]:
@@ -572,6 +581,8 @@ def main() -> int:
             result = scan_site(entry, rrp, args.delay)
         except Exception as exc:
             result = {"site": site.get("name", site["url"]), "url": site["url"],
+                      "legal_entity": site.get("legal_entity"), "inn": site.get("inn"),
+                      "verified": site.get("verified", False),
                       "items": [], "violations": [], "unresolved": [],
                       "pages_ok": 0, "pages_attempted": 0, "errors": [repr(exc)]}
         reports.append(result)
