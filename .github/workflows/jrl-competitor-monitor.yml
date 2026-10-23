@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/jrl-competitor-monitor-2026-10
+      - feature/jrl-monitor-8sites-rrp-clean
     paths:
       - ".github/workflows/jrl-competitor-monitor.yml"
       - "competitor_monitor/**"
