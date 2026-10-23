@@ -39,6 +39,11 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m competitor_monitor.monitor
+      - name: Smoke check public sites without Telegram on feature branch
+        if: github.event_name == 'push'
+        env:
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+        run: python -m competitor_monitor.monitor --no-telegram --max-products 8 --delay 0.2
       - name: Save details
         if: always()
         uses: actions/upload-artifact@v4
