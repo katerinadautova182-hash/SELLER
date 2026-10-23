@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: jrl-competitor-monitor
+  group: jrl-competitor-monitor-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
