@@ -72,7 +72,7 @@ def fingerprint_rrp(rrp: dict[str, dict], codes: list[str]) -> str:
 
 def verify_rrp_reference(rrp: dict[str, dict],
                          reference_path: str | Path = "competitor_monitor/rrp_reference.json") -> None:
-    """Fail closed if RRP_MAP_B64 diverges from the 219 official JRL sheet entries."""
+    """Fail closed if jrl_rrp.csv diverges from the 219 official JRL entries."""
     source = json.loads(Path(reference_path).read_text(encoding="utf-8"))
     codes = source["sku_codes"]
     if len(codes) != source["sku_count"] or len(codes) != len(set(codes)):
@@ -80,17 +80,17 @@ def verify_rrp_reference(rrp: dict[str, dict],
     missing = sorted(set(codes) - set(rrp))
     if missing:
         raise RuntimeError(
-            f"В GitHub RRP_MAP_B64 отсутствует {len(missing)} из {len(codes)} "
+            f"В файле jrl_rrp.csv отсутствует {len(missing)} из {len(codes)} "
             f"артикулов JRL из официального прайса: {', '.join(missing[:20])}. "
-            "Обновите секрет по таблице «База РРЦ — Mark Shmidt & JRL»."
+            "Обновите файл jrl_rrp.csv по таблице «База РРЦ — Mark Shmidt & JRL»."
         )
     observed = fingerprint_rrp(rrp, codes)
     if observed != source["fnv1a64_cents"]:
         raise RuntimeError(
-            "РРЦ в GitHub RRP_MAP_B64 не совпадают с официальной базой "
+            "РРЦ в файле jrl_rrp.csv не совпадают с официальной базой "
             f"({source['sku_count']} артикулов JRL, сверка от {source['checked_on']}). "
             "Нельзя отправлять менеджерам расхождения по устаревшему прайсу. "
-            "Сначала актуализируйте RRP_MAP_B64."
+            "Сначала актуализируйте jrl_rrp.csv и контрольную сумму справочника."
         )
 
 
