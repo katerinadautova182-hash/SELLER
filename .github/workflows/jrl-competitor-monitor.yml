@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/jrl-competitor-monitor-2026-10
+      - feature/jrl-monitor-8sites-rrp-clean
     paths:
       - ".github/workflows/jrl-competitor-monitor.yml"
       - "competitor_monitor/**"
@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: jrl-competitor-monitor
+  group: jrl-competitor-monitor-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -35,14 +35,17 @@ jobs:
       - name: Check sites and send one Telegram message per site
         if: github.event_name != 'push'
         env:
-          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m competitor_monitor.monitor
-      - name: Smoke check public sites without Telegram on feature branch
-        if: github.event_name == 'push'
+      - name: Send separate manager-ready reports for all eight sites
+        if: "github.event_name == 'push' && startsWith(github.event.head_commit.message, 'send: competitor-monitor telegram')"
         env:
-          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m competitor_monitor.monitor --max-products 8 --delay 0.2
+      - name: Smoke-check all eight sites (no Telegram)
+        if: "github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'send: competitor-monitor telegram')"
         run: python -m competitor_monitor.monitor --no-telegram --max-products 8 --delay 0.2
       - name: Save details
         if: always()

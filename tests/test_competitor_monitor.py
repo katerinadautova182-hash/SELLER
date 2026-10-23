@@ -1,5 +1,5 @@
-import base64
-import json
+from pathlib import Path
+from competitor_monitor.reference_rrp import validate_rrp_reference, REFERENCE_SKUS
 from bs4 import BeautifulSoup
 from competitor_monitor.monitor import (
     clean_code, load_rrp, match_sku, current_prices, candidate, extract, format_report
@@ -15,10 +15,12 @@ RRP = {
     clean_code("GH2024-1"): {"sku":"GH2024-1","rrp":27455},
 }
 
-def test_rrp_secret_shape(monkeypatch):
-    data={"2020C":14070,"2020C-B":18760}
-    monkeypatch.setenv("RRP_MAP_B64", base64.b64encode(json.dumps(data).encode()).decode())
-    assert load_rrp()["2020CB"]["rrp"] == 18760
+def test_jrl_rrp_csv_is_complete_and_verified():
+    assert Path("competitor_monitor/rrp_jrl.csv").exists()
+    prices = load_rrp()
+    assert len(prices) == 219 == len(REFERENCE_SKUS)
+    assert prices["2020CB"]["rrp"] == 18760
+    validate_rrp_reference(prices)
 
 def test_match_full_codes_and_cyrillic_letters():
     assert match_sku("JRL Fresh Fade 2020C",RRP)["sku"]=="2020C"
@@ -110,3 +112,21 @@ def test_accessory_page_no_false_device_even_without_h1():
         'JRL FF2020C</a><span>2 090 ₽</span></div>', "html.parser")
     rows, _ = extract(soup, "https://jrl-pro.ru/", RRP)
     assert not any(r["sku"] == "2020C" and r["status"] == "MATCHED" for r in rows)
+
+def test_report_starts_with_site_and_legal_entity():
+    data = {"site": "BarberKit", "url": "https://barberkit.ru/",
+            "legal_entity": "ИП Хайбуллин Альберт Артурович",
+            "verified": True, "items": [], "violations": [],
+            "unresolved": [{"sku": "", "status": "UNMATCHED_SKU"}],
+            "pages_ok": 1, "pages_attempted": 1, "errors": []}
+    body = format_report(data)
+    assert body.splitlines()[0] == "barberkit.ru — ИП Хайбуллин Альберт Артурович"
+    assert "ТЕСТОВАЯ ПРОВЕРКА" not in body
+    assert "Без надёжного сопоставления" not in body
+
+def test_site_count_and_legal_data_saved():
+    import json
+    sites = json.loads(Path("competitor_monitor/sites.json").read_text(encoding="utf-8"))["sites"]
+    assert len(sites) == 8
+    assert len({site["url"] for site in sites}) == 8
+    assert all(site.get("legal_entity") and site.get("inn") for site in sites)
