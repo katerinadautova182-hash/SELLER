@@ -46,8 +46,9 @@
       "max_product_pages": 65,
       "legal_entity": "ООО «Феномен»",
       "inn": "9723246098",
-      "legal_source": "https://2152387.ru/",
-      "verified": true
+      "legal_source": "https://tapki.com/ru/domain/4060112",
+      "verified": false,
+      "legal_note": "Идентификация по сторонним данным; договор-оферта сайта не подтверждён"
     },
     {
       "name": "JRL Store",
@@ -88,7 +89,8 @@
       "verified": true,
       "legal_note": "В пользовательском соглашении указано другое ИП; использовать раздел «Реквизиты»",
       "categories": [
-        "/collection/jrl"
+        "/collection/jrl",
+        "/"
       ],
       "max_product_pages": 65
     },
