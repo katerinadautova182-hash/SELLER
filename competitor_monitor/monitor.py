@@ -316,12 +316,20 @@ def candidate(node, page_url: str, rrp: dict, source: str):
     if is_unavailable(node.get_text(" ", strip=True)):
         return {"sku": sku["sku"] if sku else "", "name": name, "url": url, "price": None,
                 "rrp": sku["rrp"] if sku else None, "status": "OUT_OF_STOCK", "source": source}
-    if len(set(price_list)) > 1:
-        # Variant selectors may show multiple simultaneously active choices.
-        return {"sku": sku["sku"] if sku else "", "name": name, "url": url, "price": None,
-                "rrp": sku["rrp"] if sku else None, "status": "MULTIPLE_PRICES", "source": source}
+    unique_prices = list(dict.fromkeys(price_list))
+    if len(unique_prices) > 1:
+        # IParikmaher displays the crossed-out original first, then the active
+        # sale price in separate spans; other stores remain ambiguous.
+        if (urlparse(page_url).netloc.endswith("iparikmaher.ru")
+                and len(unique_prices) == 2 and unique_prices[0] > unique_prices[1]):
+            price = unique_prices[1]
+        else:
+            return {"sku": sku["sku"] if sku else "", "name": name, "url": url, "price": None,
+                    "rrp": sku["rrp"] if sku else None, "status": "MULTIPLE_PRICES", "source": source}
+    else:
+        price = unique_prices[0]
     return {"sku": sku["sku"] if sku else "", "name": name, "url": url,
-            "price": price_list[0], "rrp": sku["rrp"] if sku else None,
+            "price": price, "rrp": sku["rrp"] if sku else None,
             "status": "MATCHED" if sku else "UNMATCHED_SKU", "source": source}
 
 
