@@ -1,0 +1,53 @@
+{
+  "sites": [
+    {
+      "name": "BarberKit",
+      "url": "https://barberkit.ru/",
+      "categories": [
+        "/mashinki/",
+        "/trimmer/",
+        "/shaver/",
+        "/hair_dryers/",
+        "/combos/",
+        "/nozhi/",
+        "/combs/"
+      ],
+      "max_product_pages": 65
+    },
+    {
+      "name": "JRL Russia",
+      "url": "https://jrlrus.ru/",
+      "categories": [
+        "/mashinki/",
+        "/trimmeri/",
+        "/shejveri/",
+        "/feni/",
+        "/plojki/",
+        "/shhipci/",
+        "/nabory/",
+        "/aksessuari/"
+      ],
+      "max_product_pages": 65
+    },
+    {
+      "name": "JRL Pro",
+      "url": "https://jrl-pro.ru/",
+      "categories": [
+        "/"
+      ],
+      "max_product_pages": 65
+    },
+    {
+      "name": "JRL Store",
+      "url": "https://jrlstore.ru/",
+      "categories": [
+        "/mashinki",
+        "/trimery",
+        "/feny",
+        "/accesyary",
+        "/raschesky"
+      ],
+      "max_product_pages": 65
+    }
+  ]
+}
