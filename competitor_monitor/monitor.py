@@ -19,6 +19,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from ozon_agent.telegram import send_telegram
+from .reference_rrp import validate_rrp_reference
 
 PRICE_RE = re.compile(r"(?<!\d)(\d{1,3}(?:[\s\u00a0\u202f.]?\d{3})+(?:[.,]\d{1,2})?|\d{3,6}(?:[.,]\d{1,2})?)\s*(?:₽|руб(?:\.|\b)|р\.)", re.I)
 OLD_MARKERS = ("old-price", "price-old", "old_price", "price_old", "oldprice",
@@ -563,6 +564,7 @@ def main() -> int:
     ap.add_argument("--max-products", type=int, default=None, help="Override per-site crawl limit for smoke tests")
     args = ap.parse_args()
     rrp = load_rrp()
+    validate_rrp_reference(rrp)
     config = json.loads(Path(args.sites).read_text(encoding="utf-8"))
     reports = []
     for site in config["sites"]:
