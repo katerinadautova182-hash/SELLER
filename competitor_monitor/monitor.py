@@ -118,6 +118,23 @@ def is_compatible(name: str, sku: str) -> bool:
     return True
 
 
+ACCESSORY_SLUG = re.compile(
+    r"(?:nabor[-_]?dvojnyh[-_]?magnitnyh[-_]?nasadok|"
+    r"zaryadn|zarjadn|zaryadk|zaryadka|podstavk|nasadok|nasadki|"
+    r"nozhevoj[-_]?blok|nozhevoy[-_]?blok|blade[-_]?for|"
+    r"blade[-_]?2020|nozhi/|aksessuari/|accessories/|accessory/)",
+    re.I,
+)
+
+
+def url_compatible(url: str, sku: str) -> bool:
+    """Main devices cannot be priced from a URL explicitly listing a spare part."""
+    return not (
+        MAIN_MACHINE_CODE.match(clean_code(sku))
+        and ACCESSORY_SLUG.search(urlparse(url).path)
+    )
+
+
 def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
     original = str(name).upper()
     normalized = original.translate(str.maketrans({
@@ -239,6 +256,8 @@ def candidate(node, page_url: str, rrp: dict, source: str):
     if not name:
         return None
     sku = match_sku(name, rrp)
+    if sku and not url_compatible(url, sku["sku"]):
+        sku = None
     price_list = current_prices(node)
     if not price_list:
         return {"sku": sku["sku"] if sku else "", "name": name, "url": url, "price": None,
@@ -295,6 +314,8 @@ def jsonld_records(soup, url: str, rrp: dict) -> list[dict]:
                 status = ("OUT_OF_STOCK" if any(w in avail for w in ("outofstock", "soldout"))
                           else "MATCHED" if sku else "UNMATCHED_SKU")
                 product_link = internal_url(url, str(obj.get("url") or "")) or url
+                if sku and not url_compatible(product_link, sku["sku"]):
+                    sku = None
                 results.append({"sku": sku["sku"] if sku else "", "name": name,
                                 "url": product_link, "price": None if status == "OUT_OF_STOCK" else price,
                                 "rrp": sku["rrp"] if sku else None,
@@ -385,9 +406,13 @@ def extract(soup: BeautifulSoup, url: str, rrp: dict) -> tuple[list[dict], list[
                 if TITLE_SKU.search(parent.get_text(" ", strip=True)[:500]):
                     links.append(link)
                     break
-    if page_is_accessory:
+    if page_is_accessory or ACCESSORY_SLUG.search(urlparse(url).path):
         results = [r for r in results if not
                    (r.get("sku") and MAIN_MACHINE_CODE.match(clean_code(r["sku"])))]
+    # Product link can be more specific than its parent catalogue card title.
+    for row in results:
+        if row.get("sku") and not url_compatible(row.get("url", url), row["sku"]):
+            row.update(sku="", rrp=None, status="UNMATCHED_SKU")
     return results, list(dict.fromkeys(links))
 
 
