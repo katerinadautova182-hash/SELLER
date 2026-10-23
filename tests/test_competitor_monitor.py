@@ -202,3 +202,21 @@ def test_full_219_price_catalog_matches_reference():
     assert prices["2020CB"]["rrp"] == 18760
     assert prices["2025CH"]["rrp"] == 19889
     assert prices["GH20243"]["rrp"] == 50126
+
+
+def test_iparikmaher_dual_list_and_sale_price_is_second():
+    html = (
+        '<div class="product-item">'
+        '<a href="/product/jrl2020c">Машинка для стрижки JRL FreshFade 2020C</a>'
+        '<span class="regular-price">19 990 ₽</span>'
+        '<span class="sale-price">15 990 ₽</span>'
+        '</div>'
+    )
+    block = BeautifulSoup(html, "html.parser")
+    row = candidate(block.div, "https://iparikmaher.ru/collection/jrl", RRP, "card")
+    assert row["status"] == "MATCHED"
+    assert row["price"] == 15990
+
+    # Other shops with two live variant prices must remain unresolved.
+    row_other = candidate(block.div, "https://barberkit.ru/", RRP, "card")
+    assert row_other["status"] == "MULTIPLE_PRICES"
