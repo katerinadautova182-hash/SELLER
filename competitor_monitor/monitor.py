@@ -81,6 +81,43 @@ def load_rrp() -> dict[str, dict]:
     return out
 
 
+# Product family is not the same as a spare part referencing that model.
+# Guard against e.g. "Зарядная подставка для JRL 2020C" matching 2020C.
+ACCESSORY_WORDS = re.compile(
+    r"зарядн\w*\s*(?:баз|подстав|станц|блок|устройств)|"
+    r"док[-\s]?станц|"
+    r"(?:ножев\w*\s+блок|сменн\w*\s+нож|нож\s+для|лезви\w*\s+для)|"
+    r"(?:магнитн\w*\s+)?насад\w*\s+(?:для|к|на)\s+машин|"
+    r"набор\s+(?:двойн\w*\s+)?(?:магнитн\w*\s+)?насад|"
+    r"подставк\w*\s+для\s+(?:машин|триммер)|"
+    r"(?:чехол|коврик|держател|сумка)\s+для\s+(?:машин|триммер)|"
+    r"(?:батаре|аккумулятор)\s+для\s+(?:машин|триммер)|"
+    r"(?:фейд|фейдовый|fade|standard|taper)\s+(?:нож|лезви|blade)|"
+    r"(?:нож|лезви|blade)\s+(?:fade|standard|taper|2020C|2020T)",
+    re.I,
+)
+MAIN_MACHINE_CODE = re.compile(
+    r"^(?:2020C|2020T|2025C|2025T|3000C|FR10|SH2301|GH2024|ONYX2024|2020C2020T)"
+)
+BUNDLE_CODES = ("GH2024", "ONYX2024", "2020C2020T")
+
+
+def is_compatible(name: str, sku: str) -> bool:
+    """Reject obvious wrong product families, not just matching model references."""
+    identifier = clean_code(sku)
+    title = str(name)
+    if MAIN_MACHINE_CODE.match(identifier) and ACCESSORY_WORDS.search(title):
+        return False
+    # A 2020C/2020T bundle must be a set of devices, never accessories "for" both.
+    if identifier == "2020C2020T":
+        return bool(re.search(r"(?:машинк\w*\s*(?:\+|и|и\s*триммер|с)\s*триммер|"
+                              r"комплект\w*\s+(?:машинк|триммер)|набор\w*\s+(?:машинк|триммер))",
+                              title, re.I))
+    if identifier.startswith("GH2024"):
+        return not bool(re.search(r"зарядн\w*|насадк\w*|ножев\w*\s+блок", title, re.I))
+    return True
+
+
 def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
     original = str(name).upper()
     normalized = original.translate(str.maketrans({
@@ -106,7 +143,7 @@ def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
             continue
         pattern = (r"(?<![A-Z0-9])(?:FF)?" + code_pattern(item["sku"]) +
                    r"(?![-A-Z0-9])")
-        if re.search(pattern, normalized):
+        if re.search(pattern, normalized) and is_compatible(original, item["sku"]):
             return item
     if is_bundle:
         return None
@@ -120,9 +157,10 @@ def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
         for color, code in colors.items():
             if clean_code(code) not in rrp:
                 continue
-            if any(word in original or word in normalized for word in COLOR_WORDS[color]):
+            if (any(word in original or word in normalized for word in COLOR_WORDS[color])
+                    and is_compatible(original, code)):
                 return rrp[clean_code(code)]
-    if re.search(r"(?<![A-Z0-9])1040(?![A-Z0-9])", squashed) and "FR1040" in rrp:
+    if re.search(r"(?<![A-Z0-9])1040(?![A-Z0-9])", squashed) and "FR1040" in rrp and is_compatible(original, "FR1040"):
         return rrp["FR1040"]
     return None
 
@@ -266,6 +304,12 @@ def jsonld_records(soup, url: str, rrp: dict) -> list[dict]:
 
 def extract(soup: BeautifulSoup, url: str, rrp: dict) -> tuple[list[dict], list[str]]:
     results = jsonld_records(soup, url, rrp)
+    page_h1 = soup.find("h1")
+    heading = clean_title(page_h1.get_text(" ", strip=True)) if page_h1 else ""
+    # Detail pages may have links to related machines and accessories. The
+    # current page H1 is authoritative for rejecting accessory-vs-main false hits.
+    page_is_accessory = bool(heading and ACCESSORY_WORDS.search(heading))
+
     # Site cards are parsed independently: NEVER take the first price on an entire page.
     for card in soup.select(CARD_SELECTORS):
         text = card.get_text(" ", strip=True)
@@ -341,6 +385,9 @@ def extract(soup: BeautifulSoup, url: str, rrp: dict) -> tuple[list[dict], list[
                 if TITLE_SKU.search(parent.get_text(" ", strip=True)[:500]):
                     links.append(link)
                     break
+    if page_is_accessory:
+        results = [r for r in results if not
+                   (r.get("sku") and MAIN_MACHINE_CODE.match(clean_code(r["sku"])))]
     return results, list(dict.fromkeys(links))
 
 
