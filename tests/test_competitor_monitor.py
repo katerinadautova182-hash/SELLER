@@ -1,5 +1,5 @@
-import base64
 import json
+import csv
 from bs4 import BeautifulSoup
 from competitor_monitor.monitor import (
     clean_code, load_rrp, match_sku, current_prices, candidate, extract, format_report
@@ -15,10 +15,14 @@ RRP = {
     clean_code("GH2024-1"): {"sku":"GH2024-1","rrp":27455},
 }
 
-def test_rrp_secret_shape(monkeypatch):
-    data={"2020C":14070,"2020C-B":18760}
-    monkeypatch.setenv("RRP_MAP_B64", base64.b64encode(json.dumps(data).encode()).decode())
-    assert load_rrp(validate_reference=False)["2020CB"]["rrp"] == 18760
+def test_rrp_csv_is_not_a_secret(tmp_path):
+    path = tmp_path / "rrp.csv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["sku", "name", "rrp"])
+        writer.writerow(["2020C", "Машинка JRL", 14070])
+        writer.writerow(["2020C-B", "JRL ONYX", 18760])
+    assert load_rrp(path, validate_reference=False)["2020CB"]["rrp"] == 18760
 
 def test_match_full_codes_and_cyrillic_letters():
     assert match_sku("JRL Fresh Fade 2020C",RRP)["sku"]=="2020C"
@@ -61,7 +65,7 @@ def test_variant_ambiguous():
 def test_blocked_site_no_false_all_clear():
     x={"site":"Example","url":"https://example.ru/","items":[],"violations":[],
        "unresolved":[],"pages_ok":0,"pages_attempted":2,"errors":["403"]}
-    assert "НЕ завершена" in format_report(x)
+    assert "Вывод о соблюдении РРЦ невозможен" in format_report(x)
 
 
 def test_accessory_code_reference_cannot_become_main_equipment():
@@ -121,9 +125,12 @@ def test_manager_message_has_real_name_price_rrp_and_no_technical_line():
             "price":15000,"rrp":14070,"url":"https://example.ru/fade",
             "price_conflict":False}
     report = {"site":"BarberKit","url":"https://barberkit.ru/",
+              "legal_entity":"ИП Хайбуллин Альберт Артурович",
+              "legal_status":"verified",
               "items":[item,good],"unresolved":[{"status":"UNMATCHED_SKU"}],
               "pages_ok":10,"pages_attempted":10,"errors":[]}
     msg = format_report(report)
+    assert msg.startswith("barberkit.ru — ИП Хайбуллин Альберт Артурович")
     assert "Машинка JRL ONYX 2020C-B" in msg
     assert "Цена на сайте: 17 990 ₽" in msg
     assert "РРЦ: 18 760 ₽" in msg
@@ -149,7 +156,7 @@ def test_telegram_does_not_cut_product_rows():
     msg = format_report(report)
     assert len(msg) <= 3850
     assert "Остальные позиции:" in msg
-    assert msg.count("Цена на сайте:") == msg.count("РРЦ:")
+    assert msg.count("Цена на сайте:") == msg.count("\nРРЦ: ")
 
 
 def test_reference_check_rejects_missing_or_wrong_prices(tmp_path):
@@ -174,3 +181,24 @@ def test_official_reference_contains_219_unique_skus():
     assert meta["brand"]=="JRL"
     assert len(meta["sku_codes"])==219
     assert len(set(meta["sku_codes"]))==219
+
+
+def test_eight_sites_have_registered_legal_entities():
+    from pathlib import Path
+    data = json.loads(Path("competitor_monitor/sites.json").read_text(encoding="utf-8"))["sites"]
+    assert len(data) == 8
+    assert len({x["url"] for x in data}) == 8
+    assert all(x.get("legal_entity") and x.get("legal_source") and x.get("inn") for x in data)
+    assert {x["url"] for x in data} >= {
+        "https://stylist-prof.ru/", "https://iparikmaher.ru/",
+        "https://www.barberpro.ru/", "https://mwrussia.ru/",
+    }
+
+
+def test_full_219_price_catalog_matches_reference():
+    prices = load_rrp()
+    assert len(prices) == 219
+    assert prices["2020C"]["rrp"] == 14070
+    assert prices["2020CB"]["rrp"] == 18760
+    assert prices["2025CH"]["rrp"] == 19889
+    assert prices["GH20243"]["rrp"] == 50126
