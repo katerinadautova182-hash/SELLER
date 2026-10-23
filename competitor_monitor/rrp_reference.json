@@ -225,5 +225,5 @@
     "TL00025"
   ],
   "fnv1a64_cents": "f088453edf30f179",
-  "note": "No RRC amounts stored in this public repository. GitHub secret RRP_MAP_B64 must match this reference exactly. Update fingerprint when official spreadsheet changes."
+  "note": "Public JRL RRP prices are stored in competitor_monitor/jrl_rrp.csv, independent of purchasing-cost secrets. After official price changes, update both CSV and reference checksum in same PR."
 }
