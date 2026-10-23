@@ -12,7 +12,11 @@
         "/nozhi/",
         "/combs/"
       ],
-      "max_product_pages": 65
+      "max_product_pages": 65,
+      "legal_entity": "ИП Хайбуллин Альберт Артурович",
+      "inn": "165720713414",
+      "legal_source": "https://barberkit.ru/about_company/",
+      "verified": true
     },
     {
       "name": "JRL Russia",
@@ -27,7 +31,11 @@
         "/nabory/",
         "/aksessuari/"
       ],
-      "max_product_pages": 65
+      "max_product_pages": 65,
+      "legal_entity": "ООО «Фирменный Магазин»",
+      "inn": "5032282269",
+      "legal_source": "https://jrlrus.ru/contact-us/",
+      "verified": true
     },
     {
       "name": "JRL Pro",
@@ -35,7 +43,11 @@
       "categories": [
         "/"
       ],
-      "max_product_pages": 65
+      "max_product_pages": 65,
+      "legal_entity": "ООО «Феномен»",
+      "inn": "9723246098",
+      "legal_source": "https://2152387.ru/",
+      "verified": true
     },
     {
       "name": "JRL Store",
@@ -46,6 +58,67 @@
         "/feny",
         "/accesyary",
         "/raschesky"
+      ],
+      "max_product_pages": 65,
+      "legal_entity": "ООО «Лангбарт»",
+      "inn": "7840110428",
+      "legal_source": "https://jrlstore.ru/contact-us",
+      "verified": true
+    },
+    {
+      "name": "Stylist Prof",
+      "url": "https://stylist-prof.ru/",
+      "legal_entity": "ИП Пирогов Андрей Юрьевич",
+      "inn": "770302435900",
+      "legal_source": "https://base.garant.ru/65104727/",
+      "verified": false,
+      "legal_note": "Данные в судебном акте 2022 года; актуальность не установлена",
+      "categories": [
+        "/elektroinstrument/mashinki-dlya-strizhki/",
+        "/"
+      ],
+      "max_product_pages": 65
+    },
+    {
+      "name": "IPARIKMAHER",
+      "url": "https://iparikmaher.ru/",
+      "legal_entity": "ИП Заложных Елена Александровна",
+      "inn": "780713951464",
+      "legal_source": "https://iparikmaher.ru/page/rekvizity",
+      "verified": true,
+      "legal_note": "В пользовательском соглашении указано другое ИП; использовать раздел «Реквизиты»",
+      "categories": [
+        "/collection/jrl"
+      ],
+      "max_product_pages": 65
+    },
+    {
+      "name": "BarberPro",
+      "url": "https://www.barberpro.ru/",
+      "legal_entity": "ИП Сизов А. И.",
+      "inn": "503303138920",
+      "legal_source": "https://www.barberpro.ru/obratnaya-svyaz",
+      "verified": true,
+      "categories": [
+        "/brands/jrl",
+        "/catalog/tags/jrl"
+      ],
+      "max_product_pages": 65
+    },
+    {
+      "name": "MWRussia",
+      "url": "https://mwrussia.ru/",
+      "legal_entity": "ООО «Фирменный Магазин»",
+      "inn": "5032282269",
+      "legal_source": "https://mwrussia.ru/contacts/",
+      "verified": true,
+      "categories": [
+        "/jrl",
+        "/mashinki-dlya-strizhki-volos/mashinki-jrl/",
+        "/trimmery/trimmery-jrl/",
+        "/feny-1/feny-jrl/",
+        "/nabory/nabory-jrl/",
+        "/britvy-sheyvery/jrl/"
       ],
       "max_product_pages": 65
     }
