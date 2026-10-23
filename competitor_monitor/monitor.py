@@ -528,6 +528,12 @@ def scan_site(site: dict, rrp: dict, delay: float = 0.8) -> dict:
         visited.add(url)
         time.sleep(delay)
 
+    if not any(r.get("status") == "MATCHED" for r in records):
+        # Diagnostics stay in GitHub logs, never in forwarded manager messages.
+        print(f"DEBUG {site['name']}: extracted={len(records)}, errors={len(errors)}, "
+              f"sample={[(r.get('status'), r.get('name'), r.get('price')) for r in records[:12]]}",
+              flush=True)
+
     # One entry per SKU with the lowest reliably visible current price.
     # Keep different advertised prices (catalogue/detail) in the audit.
     matched = defaultdict(list)
