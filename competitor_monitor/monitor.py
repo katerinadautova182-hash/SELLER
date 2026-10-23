@@ -531,9 +531,6 @@ def format_report(report: dict) -> str:
         else:
             lines.append("")
             lines.append("По сопоставленным товарам цен ниже РРЦ не обнаружено.")
-    if report["unresolved"]:
-        lines.append(f"Без надёжного сопоставления/цены: {len(report['unresolved'])} "
-                     f"наблюдений (CSV/JSON в артефактах).")
     if report["errors"]:
         lines.append(f"Пример ошибки: {report['errors'][0][:160]}")
     msg = "\n".join(lines)
@@ -564,7 +561,6 @@ def main() -> int:
     ap.add_argument("--no-telegram", action="store_true")
     ap.add_argument("--delay", type=float, default=0.8)
     ap.add_argument("--max-products", type=int, default=None, help="Override per-site crawl limit for smoke tests")
-    ap.add_argument("--test", action="store_true", help="Mark all Telegram messages as test")
     args = ap.parse_args()
     rrp = load_rrp()
     config = json.loads(Path(args.sites).read_text(encoding="utf-8"))
@@ -578,7 +574,7 @@ def main() -> int:
                       "items": [], "violations": [], "unresolved": [],
                       "pages_ok": 0, "pages_attempted": 0, "errors": [repr(exc)]}
         reports.append(result)
-        message = ("ТЕСТОВАЯ ПРОВЕРКА — предварительные данные\n" if args.test else "") + format_report(result)
+        message = format_report(result)
         print(message, "\n" + "-" * 50, flush=True)
         # Exactly one Telegram text message per configured site, including empty/error results.
         if not args.no_telegram:
