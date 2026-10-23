@@ -69,7 +69,8 @@
       "name": "Stylist Prof",
       "url": "https://stylist-prof.ru/",
       "categories": [
-        "/"
+        "/elektroinstrument/mashinki-dlya-strizhki/",
+        "/elektroinstrument/"
       ],
       "max_product_pages": 65,
       "legal_entity": "ИП Пирогов Андрей Юрьевич",
@@ -94,7 +95,8 @@
       "name": "BarberPro",
       "url": "https://www.barberpro.ru/",
       "categories": [
-        "/"
+        "/brands/jrl",
+        "/catalog/tags/jrl"
       ],
       "max_product_pages": 65,
       "legal_entity": "ИП Сизов А. И.",
