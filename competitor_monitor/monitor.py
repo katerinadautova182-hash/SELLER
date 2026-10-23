@@ -55,7 +55,47 @@ def clean_code(s: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", s)
 
 
-def load_rrp() -> dict[str, dict]:
+def fingerprint_rrp(rrp: dict[str, dict], codes: list[str]) -> str:
+    """Stable non-cryptographic 64-bit reference check without publishing RRP values."""
+    text = ""
+    for code in sorted(codes):
+        price = float(rrp[code]["rrp"])
+        cents = round(price * 100)
+        if abs(cents / 100 - price) > 0.001:
+            raise ValueError(f"Цена должна иметь не более двух знаков: {code}")
+        text += f"{code}\t{cents}\n"
+    checksum = 0xCBF29CE484222325
+    for byte in text.encode("ascii"):
+        checksum ^= byte
+        checksum = (checksum * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return f"{checksum:016x}"
+
+
+def verify_rrp_reference(rrp: dict[str, dict],
+                         reference_path: str | Path = "competitor_monitor/rrp_reference.json") -> None:
+    """Fail closed if RRP_MAP_B64 diverges from the 219 official JRL sheet entries."""
+    source = json.loads(Path(reference_path).read_text(encoding="utf-8"))
+    codes = source["sku_codes"]
+    if len(codes) != source["sku_count"] or len(codes) != len(set(codes)):
+        raise ValueError("Повреждён справочник проверки РРЦ JRL.")
+    missing = sorted(set(codes) - set(rrp))
+    if missing:
+        raise RuntimeError(
+            f"В GitHub RRP_MAP_B64 отсутствует {len(missing)} из {len(codes)} "
+            f"артикулов JRL из официального прайса: {', '.join(missing[:20])}. "
+            "Обновите секрет по таблице «База РРЦ — Mark Shmidt & JRL»."
+        )
+    observed = fingerprint_rrp(rrp, codes)
+    if observed != source["fnv1a64_cents"]:
+        raise RuntimeError(
+            "РРЦ в GitHub RRP_MAP_B64 не совпадают с официальной базой "
+            f"({source['sku_count']} артикулов JRL, сверка от {source['checked_on']}). "
+            "Нельзя отправлять менеджерам расхождения по устаревшему прайсу. "
+            "Сначала актуализируйте RRP_MAP_B64."
+        )
+
+
+def load_rrp(*, validate_reference: bool = True) -> dict[str, dict]:
     raw = os.getenv("RRP_MAP_B64", "").strip()
     if not raw:
         raise RuntimeError("Не настроен секрет RRP_MAP_B64; проверку не запускаем.")
@@ -78,6 +118,8 @@ def load_rrp() -> dict[str, dict]:
             out[sku] = {"sku": str(raw_sku), "rrp": price}
     if not out:
         raise RuntimeError("RRP_MAP_B64 пустой или не содержит числовых РРЦ.")
+    if validate_reference:
+        verify_rrp_reference(out)
     return out
 
 
