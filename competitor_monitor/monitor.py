@@ -316,6 +316,8 @@ def jsonld_records(soup, url: str, rrp: dict) -> list[dict]:
                 product_link = internal_url(url, str(obj.get("url") or "")) or url
                 if sku and not url_compatible(product_link, sku["sku"]):
                     sku = None
+                    if status == "MATCHED":
+                        status = "UNMATCHED_SKU"
                 results.append({"sku": sku["sku"] if sku else "", "name": name,
                                 "url": product_link, "price": None if status == "OUT_OF_STOCK" else price,
                                 "rrp": sku["rrp"] if sku else None,
@@ -562,6 +564,7 @@ def main() -> int:
     ap.add_argument("--no-telegram", action="store_true")
     ap.add_argument("--delay", type=float, default=0.8)
     ap.add_argument("--max-products", type=int, default=None, help="Override per-site crawl limit for smoke tests")
+    ap.add_argument("--test", action="store_true", help="Mark all Telegram messages as test")
     args = ap.parse_args()
     rrp = load_rrp()
     config = json.loads(Path(args.sites).read_text(encoding="utf-8"))
@@ -575,7 +578,7 @@ def main() -> int:
                       "items": [], "violations": [], "unresolved": [],
                       "pages_ok": 0, "pages_attempted": 0, "errors": [repr(exc)]}
         reports.append(result)
-        message = format_report(result)
+        message = ("ТЕСТОВАЯ ПРОВЕРКА — предварительные данные\n" if args.test else "") + format_report(result)
         print(message, "\n" + "-" * 50, flush=True)
         # Exactly one Telegram text message per configured site, including empty/error results.
         if not args.no_telegram:
