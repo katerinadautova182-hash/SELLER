@@ -5,12 +5,12 @@
       "url": "https://barberkit.ru/",
       "categories": [
         "/mashinki/",
-        "/trimmery/",
-        "/shejvery/",
-        "/feny/",
+        "/trimmer/",
+        "/shaver/",
+        "/hair_dryers/",
         "/combos/",
-        "/bloki/",
-        "/rascheski/"
+        "/nozhi/",
+        "/combs/"
       ],
       "max_product_pages": 65
     },
@@ -19,11 +19,13 @@
       "url": "https://jrlrus.ru/",
       "categories": [
         "/mashinki/",
-        "/trimmery/",
-        "/shejvery/",
-        "/feny/",
-        "/nabori/",
-        "/aksessuary/"
+        "/trimmeri/",
+        "/shejveri/",
+        "/feni/",
+        "/plojki/",
+        "/shhipci/",
+        "/nabory/",
+        "/aksessuari/"
       ],
       "max_product_pages": 65
     },
@@ -40,11 +42,10 @@
       "url": "https://jrlstore.ru/",
       "categories": [
         "/mashinki",
-        "/trimmery",
+        "/trimery",
         "/feny",
-        "/shchiptsy",
-        "/aksessuary",
-        "/rascheski"
+        "/accesyary",
+        "/raschesky"
       ],
       "max_product_pages": 65
     }
