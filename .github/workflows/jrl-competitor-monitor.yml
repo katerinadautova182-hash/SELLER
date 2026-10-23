@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/jrl-competitor-monitor-2026-10
+      - feature/jrl-competitor-detailed-report-2026-10-23
     paths:
       - ".github/workflows/jrl-competitor-monitor.yml"
       - "competitor_monitor/**"
@@ -32,6 +32,10 @@ jobs:
         run: python -m pip install requests beautifulsoup4 pytest
       - name: Test
         run: python -m pytest -q tests/test_competitor_monitor.py
+      - name: Check official JRL RRP against stored GitHub prices
+        env:
+          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
+        run: python -c "from competitor_monitor.monitor import load_rrp; load_rrp(); print('219 цен JRL соответствуют прайсу')"
       - name: Check sites and send one Telegram message per site
         if: github.event_name != 'push'
         env:
@@ -39,7 +43,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m competitor_monitor.monitor
-      - name: Smoke check public sites without Telegram on feature branch
+      - name: Read public catalogues without notifications
         if: github.event_name == 'push'
         env:
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
