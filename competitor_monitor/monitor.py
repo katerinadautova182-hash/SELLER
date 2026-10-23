@@ -418,7 +418,17 @@ def fetch_html(session: requests.Session, url: str) -> BeautifulSoup:
         raise ValueError(f"Не HTML: {url}")
     if len(resp.content) > 6_000_000:
         raise ValueError(f"Очень большая страница: {url}")
-    if re.search(r"captcha|проверка браузера|access denied|подтвердите.*робот", resp.text[:8000], re.I):
+    # Normal shop scripts may mention reCAPTCHA without blocking shopping.
+    # A genuine anti-bot challenge has a focused short HTML page or challenge title.
+    title_node = BeautifulSoup(resp.content[:25000], "html.parser").title
+    title_text = title_node.get_text(" ", strip=True) if title_node else ""
+    if (
+        re.search(r"access denied|проверка браузера|подтвердите.*робот", title_text, re.I)
+        or (
+            len(resp.content) < 12000
+            and re.search(r"капча|captcha|checking your browser|verify you are human", resp.text[:8000], re.I)
+        )
+    ):
         raise ValueError(f"Антибот или CAPTCHA: {url}")
     return BeautifulSoup(resp.content, "html.parser")
 
