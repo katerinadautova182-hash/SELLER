@@ -704,7 +704,12 @@ def main() -> int:
             if not send_telegram(message):
                 print("Telegram не настроен; сообщение не отправлено.", flush=True)
     save_reports(Path(args.out), reports)
-    return 1 if any(r["pages_ok"] == 0 or not r["items"] for r in reports) else 0
+    incomplete = [r["site"] for r in reports if not r["items"]]
+    if incomplete:
+        print("Не удалось подтвердить цены в: " + ", ".join(incomplete), flush=True)
+    # Per-site 'no data' errors are reported individually in Telegram and artifacts.
+    # Fail the whole job only if no site yielded a single reliable SKU/price.
+    return 1 if not any(r["items"] for r in reports) else 0
 
 
 if __name__ == "__main__":
