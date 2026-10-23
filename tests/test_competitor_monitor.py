@@ -18,7 +18,7 @@ RRP = {
 def test_rrp_secret_shape(monkeypatch):
     data={"2020C":14070,"2020C-B":18760}
     monkeypatch.setenv("RRP_MAP_B64", base64.b64encode(json.dumps(data).encode()).decode())
-    assert load_rrp()["2020CB"]["rrp"] == 18760
+    assert load_rrp(validate_reference=False)["2020CB"]["rrp"] == 18760
 
 def test_match_full_codes_and_cyrillic_letters():
     assert match_sku("JRL Fresh Fade 2020C",RRP)["sku"]=="2020C"
@@ -110,3 +110,67 @@ def test_accessory_page_no_false_device_even_without_h1():
         'JRL FF2020C</a><span>2 090 ₽</span></div>', "html.parser")
     rows, _ = extract(soup, "https://jrl-pro.ru/", RRP)
     assert not any(r["sku"] == "2020C" and r["status"] == "MATCHED" for r in rows)
+
+
+
+def test_manager_message_has_real_name_price_rrp_and_no_technical_line():
+    item = {"sku":"2020C-B","name":"Машинка JRL ONYX 2020C-B",
+            "price":17990,"rrp":18760,"url":"https://example.ru/onyx",
+            "price_conflict":False}
+    good = {"sku":"2020C","name":"Машинка JRL 2020C",
+            "price":15000,"rrp":14070,"url":"https://example.ru/fade",
+            "price_conflict":False}
+    report = {"site":"BarberKit","url":"https://barberkit.ru/",
+              "items":[item,good],"unresolved":[{"status":"UNMATCHED_SKU"}],
+              "pages_ok":10,"pages_attempted":10,"errors":[]}
+    msg = format_report(report)
+    assert "Машинка JRL ONYX 2020C-B" in msg
+    assert "Цена на сайте: 17 990 ₽" in msg
+    assert "РРЦ: 18 760 ₽" in msg
+    assert "Ниже РРЦ на 770 ₽" in msg
+    assert "https://example.ru/onyx" in msg
+    assert "БЕЗ НАДЕЖНОГО" not in msg.upper()
+    assert "НЕОДНОЗНАЧН" not in msg.upper()
+    assert "ТЕСТОВ" not in msg.upper()
+    assert "Машинка JRL 2020C" not in msg
+    assert "GitHub Actions" not in msg
+
+    full = format_report(report, max_chars=None, only_violations=False)
+    assert "Машинка JRL 2020C" in full
+
+
+def test_telegram_does_not_cut_product_rows():
+    item = {"sku":"2020C-B","name":"Машинка JRL ONYX 2020C-B",
+            "price":17990,"rrp":18760,"url":"https://example.ru/onyx",
+            "price_conflict":False}
+    report = {"site":"Shop","url":"https://example.ru/",
+              "items":[{**item,"sku":f"SKU{i}"} for i in range(300)],
+              "unresolved":[],"pages_ok":1,"pages_attempted":1,"errors":[]}
+    msg = format_report(report)
+    assert len(msg) <= 3850
+    assert "Остальные позиции:" in msg
+    assert msg.count("Цена на сайте:") == msg.count("РРЦ:")
+
+
+def test_reference_check_rejects_missing_or_wrong_prices(tmp_path):
+    from competitor_monitor.monitor import verify_rrp_reference, fingerprint_rrp
+    rows={"2020C":{"sku":"2020C","rrp":14070},
+          "2020CB":{"sku":"2020C-B","rrp":18760}}
+    ref={"sku_codes":["2020C","2020CB"],"sku_count":2,
+         "checked_on":"2026-10-23","fnv1a64_cents":fingerprint_rrp(rows,["2020C","2020CB"])}
+    path=tmp_path/"ref.json"
+    path.write_text(json.dumps(ref))
+    verify_rrp_reference(rows,path)
+
+    with __import__("pytest").raises(RuntimeError,match="отсутствует"):
+        verify_rrp_reference({"2020C":rows["2020C"]},path)
+    with __import__("pytest").raises(RuntimeError,match="не совпадают"):
+        verify_rrp_reference({**rows,"2020CB":{**rows["2020CB"],"rrp":18000}},path)
+
+
+def test_official_reference_contains_219_unique_skus():
+    from pathlib import Path
+    meta = json.loads(Path("competitor_monitor/rrp_reference.json").read_text(encoding="utf-8"))
+    assert meta["brand"]=="JRL"
+    assert len(meta["sku_codes"])==219
+    assert len(set(meta["sku_codes"]))==219
