@@ -86,27 +86,31 @@ def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
         "С": "C", "В": "B", "Т": "T", "Н": "H", "О": "O",
         "А": "A", "Х": "X", "Е": "E", "К": "K", "М": "M", "Р": "P", "У": "Y"
     }))
-    # Bundles never inherit the price of an individual machine.
-    if BUNDLE.search(normalized):
-        # Only permit an explicitly named and priced bundle SKU (e.g. GH2024-1).
-        valid_bundles = [v for k, v in rrp.items()
-                         if k.startswith(("GH2024", "ON YX2024".replace(" ", "")))]
-        for item in valid_bundles:
-            if re.search(r"(?<![A-Z0-9])" + re.escape(clean_code(item["sku"])) +
-                         r"(?![A-Z0-9])", clean_code(normalized)):
-                return item
-        return None
+    # Match only complete codes, preserving model delimiters in the source title.
+    # Pure string compression would lose word boundaries (e.g. FreshFade2020C).
+    def code_pattern(raw_sku: str) -> str:
+        normalized_sku = str(raw_sku).upper().translate(str.maketrans({
+            "С": "C", "В": "B", "Т": "T", "Н": "H", "О": "O",
+            "А": "A", "Х": "X", "Е": "E", "К": "K", "М": "M", "Р": "P", "У": "Y"
+        }))
+        chunks = re.findall(r"[A-Z0-9]+", normalized_sku)
+        return r"[-\s_/]*".join(re.escape(part) for part in chunks)
 
-    # Prefer an exact longer SKU, never match 2020C inside 2020C-B.
-    squashed = clean_code(normalized)
+    is_bundle = bool(BUNDLE.search(normalized))
     for sku in sorted(rrp, key=len, reverse=True):
+        item = rrp[sku]
         if len(sku) < 4:
             continue
-        # Covers FF2020C-B and 2020С-B (mixed Latin / Cyrillic glyphs).
-        candidate = re.compile(r"(?<![A-Z0-9])(?:FF)?" + re.escape(sku) + r"(?![A-Z0-9])")
-        if candidate.search(squashed):
-            return rrp[sku]
+        if is_bundle and not (sku.startswith("GH2024") or sku in ("2020C2020T",)):
+            continue
+        pattern = (r"(?<![A-Z0-9])(?:FF)?" + code_pattern(item["sku"]) +
+                   r"(?![-A-Z0-9])")
+        if re.search(pattern, normalized):
+            return item
+    if is_bundle:
+        return None
 
+    squashed = clean_code(normalized)
     # Catalog titles sometimes spell the family + color but omit exact color SKU.
     for family, colors in COLOR_SKUS.items():
         if family not in squashed and not (family == "2025C" and "DIAMANTE" in normalized and
