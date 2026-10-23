@@ -133,6 +133,59 @@ def load_rrp(path: str | Path = "competitor_monitor/jrl_rrp.csv",
     return out
 
 
+
+ACCESSORY_WORDS = re.compile(
+    r"зарядн\w*\s*(?:баз|подстав|станц|блок|устройств)|"
+    r"док[-\s]?станц|"
+    r"(?:ножев\w*\s+блок|сменн\w*\s+нож|нож\s+для|лезви\w*\s+для)|"
+    r"(?:магнитн\w*\s+)?насад\w*\s+(?:для|к|на)\s+машин|"
+    r"набор\s+(?:двойн\w*\s+)?(?:магнитн\w*\s+)?насад|"
+    r"подставк\w*\s+для\s+(?:машин|триммер)|"
+    r"(?:чехол|коврик|держател|сумка)\s+для\s+(?:машин|триммер)|"
+    r"(?:батаре|аккумулятор)\s+для\s+(?:машин|триммер)|"
+    r"(?:фейд|фейдовый|fade|standard|taper)\s+(?:нож|лезви|blade)|"
+    r"(?:нож|лезви|blade)\s+(?:fade|standard|taper|2020C|2020T)",
+    re.I,
+)
+MAIN_MACHINE_CODE = re.compile(
+    r"^(?:2020C|2020T|2025C|2025T|3000C|FR10|SH2301|GH2024|ONYX2024|2020C2020T)"
+)
+BUNDLE_CODES = ("GH2024", "ONYX2024", "2020C2020T")
+
+
+def is_compatible(name: str, sku: str) -> bool:
+    """Reject obvious wrong product families, not just matching model references."""
+    identifier = clean_code(sku)
+    title = str(name)
+    if MAIN_MACHINE_CODE.match(identifier) and ACCESSORY_WORDS.search(title):
+        return False
+    # A 2020C/2020T bundle must be a set of devices, never accessories "for" both.
+    if identifier == "2020C2020T":
+        return bool(re.search(r"(?:машинк\w*\s*(?:\+|и|и\s*триммер|с)\s*триммер|"
+                              r"комплект\w*\s+(?:машинк|триммер)|набор\w*\s+(?:машинк|триммер))",
+                              title, re.I))
+    if identifier.startswith("GH2024"):
+        return not bool(re.search(r"зарядн\w*|насадк\w*|ножев\w*\s+блок", title, re.I))
+    return True
+
+
+ACCESSORY_SLUG = re.compile(
+    r"(?:nabor[-_]?dvojnyh[-_]?magnitnyh[-_]?nasadok|"
+    r"zaryadn|zarjadn|zaryadk|zaryadka|podstavk|nasadok|nasadki|"
+    r"nozhevoj[-_]?blok|nozhevoy[-_]?blok|blade[-_]?for|"
+    r"blade[-_]?2020|nozhi/|aksessuari/|accessories/|accessory/)",
+    re.I,
+)
+
+
+def url_compatible(url: str, sku: str) -> bool:
+    """Main devices cannot be priced from a URL explicitly listing a spare part."""
+    return not (
+        MAIN_MACHINE_CODE.match(clean_code(sku))
+        and ACCESSORY_SLUG.search(urlparse(url).path)
+    )
+
+
 def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
     original = str(name).upper()
     normalized = original.translate(str.maketrans({
