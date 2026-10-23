@@ -42,8 +42,6 @@ jobs:
         run: python -m competitor_monitor.monitor
       - name: Read public catalogues without notifications
         if: github.event_name == 'push'
-        env:
-          RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
         run: python -m competitor_monitor.monitor --no-telegram --max-products 8 --delay 0.2
       - name: Save details
         if: always()
