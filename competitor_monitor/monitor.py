@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import csv
 import json
 import os
@@ -95,86 +94,43 @@ def verify_rrp_reference(rrp: dict[str, dict],
         )
 
 
-def load_rrp(*, validate_reference: bool = True) -> dict[str, dict]:
-    raw = os.getenv("RRP_MAP_B64", "").strip()
-    if not raw:
-        raise RuntimeError("Не настроен секрет RRP_MAP_B64; проверку не запускаем.")
-    try:
-        data = json.loads(base64.b64decode(raw, validate=True).decode("utf-8"))
-    except (ValueError, UnicodeError) as exc:
-        raise RuntimeError("RRP_MAP_B64 не содержит корректный base64 JSON") from exc
-    if not isinstance(data, dict):
-        raise ValueError("РРЦ должен быть JSON-словарём SKU -> число")
+def load_rrp(path: str | Path = "competitor_monitor/jrl_rrp.csv",
+             *, validate_reference: bool = True) -> dict[str, dict]:
+    """Load exactly the JRL retail prices from the checked-in price-list CSV.
+
+    Purchasing costs and other marketplace secrets are unrelated to this monitor.
+    Missing, duplicated and invalid codes are fatal rather than silently skipped.
+    """
+    file = Path(path)
+    if not file.exists():
+        raise RuntimeError(f"Не найден файл РРЦ JRL: {file}")
     out = {}
-    for raw_sku, raw_price in data.items():
-        try:
-            price = float(str(raw_price).replace(" ", "").replace(",", "."))
-        except (ValueError, TypeError):
-            continue
-        if price <= 0:
-            continue
-        sku = clean_code(raw_sku)
-        if sku and sku not in out:
-            out[sku] = {"sku": str(raw_sku), "rrp": price}
+    with file.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if not {"sku", "name", "rrp"}.issubset(reader.fieldnames or []):
+            raise RuntimeError("Прайс должен содержать столбцы sku, name, rrp")
+        for line, row in enumerate(reader, start=2):
+            sku = clean_code(row.get("sku", ""))
+            if not sku:
+                raise ValueError(f"Пустой артикул в строке {line}")
+            try:
+                price = float(str(row.get("rrp") or "").replace(" ", "").replace(",", "."))
+            except (ValueError, TypeError) as exc:
+                raise ValueError(f"Неверная РРЦ в строке {line}: {sku}") from exc
+            if not 0 < price < 1_000_000:
+                raise ValueError(f"Некорректная РРЦ в строке {line}: {sku}")
+            if sku in out:
+                raise ValueError(f"Дублирующийся артикул в прайсе: {sku}")
+            out[sku] = {
+                "sku": str(row["sku"]).strip(),
+                "name": str(row.get("name") or "").strip(),
+                "rrp": price,
+            }
     if not out:
-        raise RuntimeError("RRP_MAP_B64 пустой или не содержит числовых РРЦ.")
+        raise RuntimeError("Файл РРЦ пуст.")
     if validate_reference:
         verify_rrp_reference(out)
     return out
-
-
-# Product family is not the same as a spare part referencing that model.
-# Guard against e.g. "Зарядная подставка для JRL 2020C" matching 2020C.
-ACCESSORY_WORDS = re.compile(
-    r"зарядн\w*\s*(?:баз|подстав|станц|блок|устройств)|"
-    r"док[-\s]?станц|"
-    r"(?:ножев\w*\s+блок|сменн\w*\s+нож|нож\s+для|лезви\w*\s+для)|"
-    r"(?:магнитн\w*\s+)?насад\w*\s+(?:для|к|на)\s+машин|"
-    r"набор\s+(?:двойн\w*\s+)?(?:магнитн\w*\s+)?насад|"
-    r"подставк\w*\s+для\s+(?:машин|триммер)|"
-    r"(?:чехол|коврик|держател|сумка)\s+для\s+(?:машин|триммер)|"
-    r"(?:батаре|аккумулятор)\s+для\s+(?:машин|триммер)|"
-    r"(?:фейд|фейдовый|fade|standard|taper)\s+(?:нож|лезви|blade)|"
-    r"(?:нож|лезви|blade)\s+(?:fade|standard|taper|2020C|2020T)",
-    re.I,
-)
-MAIN_MACHINE_CODE = re.compile(
-    r"^(?:2020C|2020T|2025C|2025T|3000C|FR10|SH2301|GH2024|ONYX2024|2020C2020T)"
-)
-BUNDLE_CODES = ("GH2024", "ONYX2024", "2020C2020T")
-
-
-def is_compatible(name: str, sku: str) -> bool:
-    """Reject obvious wrong product families, not just matching model references."""
-    identifier = clean_code(sku)
-    title = str(name)
-    if MAIN_MACHINE_CODE.match(identifier) and ACCESSORY_WORDS.search(title):
-        return False
-    # A 2020C/2020T bundle must be a set of devices, never accessories "for" both.
-    if identifier == "2020C2020T":
-        return bool(re.search(r"(?:машинк\w*\s*(?:\+|и|и\s*триммер|с)\s*триммер|"
-                              r"комплект\w*\s+(?:машинк|триммер)|набор\w*\s+(?:машинк|триммер))",
-                              title, re.I))
-    if identifier.startswith("GH2024"):
-        return not bool(re.search(r"зарядн\w*|насадк\w*|ножев\w*\s+блок", title, re.I))
-    return True
-
-
-ACCESSORY_SLUG = re.compile(
-    r"(?:nabor[-_]?dvojnyh[-_]?magnitnyh[-_]?nasadok|"
-    r"zaryadn|zarjadn|zaryadk|zaryadka|podstavk|nasadok|nasadki|"
-    r"nozhevoj[-_]?blok|nozhevoy[-_]?blok|blade[-_]?for|"
-    r"blade[-_]?2020|nozhi/|aksessuari/|accessories/|accessory/)",
-    re.I,
-)
-
-
-def url_compatible(url: str, sku: str) -> bool:
-    """Main devices cannot be priced from a URL explicitly listing a spare part."""
-    return not (
-        MAIN_MACHINE_CODE.match(clean_code(sku))
-        and ACCESSORY_SLUG.search(urlparse(url).path)
-    )
 
 
 def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
@@ -532,6 +488,10 @@ def scan_site(site: dict, rrp: dict, delay: float = 0.8) -> dict:
         rows.append(item)
     rows.sort(key=lambda x: (x["delta"], x["sku"]))
     return {"site": site["name"], "url": base,
+            "legal_entity": site.get("legal_entity", ""),
+            "legal_status": site.get("legal_status", ""),
+            "inn": site.get("inn", ""),
+            "legal_source": site.get("legal_source", ""),
             "checked_at": datetime.now(timezone.utc).isoformat(),
             "pages_ok": pages_ok, "pages_attempted": len(visited), "errors": errors,
             "items": rows, "unresolved": unresolved,
@@ -582,9 +542,12 @@ def format_report(report: dict, *, max_chars: int | None = 3850,
         [r for r in items if float(r["price"]) >= float(r["rrp"])],
         key=lambda r: str(r["sku"]),
     )
-    lines = [f"Контроль РРЦ JRL — {report['site']}",
-             f"Сайт: {report['url']}",
-             f"Проверено товаров: {len(items)}",
+    domain = urlparse(report["url"]).netloc.removeprefix("www.")
+    owner = str(report.get("legal_entity") or "Юридическое лицо не установлено")
+    if report.get("legal_status") in ("historical_unverified", "third_party"):
+        owner += " (данные требуют подтверждения)"
+    lines = [f"{domain} — {owner}",
+             f"Контроль РРЦ JRL | проверено товаров: {len(items)}",
              f"Ниже РРЦ: {len(below)}"]
     if not items:
         lines += ["", "Не удалось получить подтверждённые цены. Вывод о соблюдении РРЦ невозможен."]
@@ -660,6 +623,10 @@ def main() -> int:
             result = scan_site(entry, rrp, args.delay)
         except Exception as exc:
             result = {"site": site.get("name", site["url"]), "url": site["url"],
+                      "legal_entity": site.get("legal_entity", ""),
+                      "legal_status": site.get("legal_status", ""),
+                      "legal_source": site.get("legal_source", ""),
+                      "inn": site.get("inn", ""),
                       "items": [], "violations": [], "unresolved": [],
                       "pages_ok": 0, "pages_attempted": 0, "errors": [repr(exc)]}
         reports.append(result)
