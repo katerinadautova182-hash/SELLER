@@ -46,7 +46,6 @@ jobs:
         run: python -m competitor_monitor.monitor --max-products 8 --delay 0.2
       - name: Smoke-check all eight sites (no Telegram)
         if: "github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'send: competitor-monitor telegram')"
-        env:
         run: python -m competitor_monitor.monitor --no-telegram --max-products 8 --delay 0.2
       - name: Save details
         if: always()
