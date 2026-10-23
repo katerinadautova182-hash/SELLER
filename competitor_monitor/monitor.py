@@ -208,7 +208,7 @@ def candidate(node, page_url: str, rrp: dict, source: str):
     if is_unavailable(node.get_text(" ", strip=True)):
         return {"sku": sku["sku"] if sku else "", "name": name, "url": url, "price": None,
                 "rrp": sku["rrp"] if sku else None, "status": "OUT_OF_STOCK", "source": source}
-    if len(set(price_list)) > 1 and source == "card":
+    if len(set(price_list)) > 1:
         # Variant selectors may show multiple simultaneously active choices.
         return {"sku": sku["sku"] if sku else "", "name": name, "url": url, "price": None,
                 "rrp": sku["rrp"] if sku else None, "status": "MULTIPLE_PRICES", "source": source}
@@ -489,13 +489,15 @@ def main() -> int:
     ap.add_argument("--out", default="artifacts/jrl-competitors")
     ap.add_argument("--no-telegram", action="store_true")
     ap.add_argument("--delay", type=float, default=0.8)
+    ap.add_argument("--max-products", type=int, default=None, help="Override per-site crawl limit for smoke tests")
     args = ap.parse_args()
     rrp = load_rrp()
     config = json.loads(Path(args.sites).read_text(encoding="utf-8"))
     reports = []
     for site in config["sites"]:
         try:
-            result = scan_site(site, rrp, args.delay)
+            entry = {**site, "max_product_pages": args.max_products} if args.max_products is not None else site
+            result = scan_site(entry, rrp, args.delay)
         except Exception as exc:
             result = {"site": site.get("name", site["url"]), "url": site["url"],
                       "items": [], "violations": [], "unresolved": [],
