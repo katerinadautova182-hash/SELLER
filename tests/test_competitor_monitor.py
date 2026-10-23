@@ -62,3 +62,26 @@ def test_blocked_site_no_false_all_clear():
     x={"site":"Example","url":"https://example.ru/","items":[],"violations":[],
        "unresolved":[],"pages_ok":0,"pages_attempted":2,"errors":["403"]}
     assert "НЕ завершена" in format_report(x)
+
+
+def test_accessory_code_reference_cannot_become_main_equipment():
+    assert match_sku("Зарядная подставка JRL для машинок 2020C и триммера 2020T", RRP) is None
+    assert match_sku("Ножевой блок Fade Blade JRL 2020C", RRP) is None
+    assert match_sku("Набор двойных магнитных насадок для машинок JRL 2020C", RRP) is None
+    assert match_sku("Набор магнитных насадок для машинок 2020C/2020T", RRP) is None
+    assert match_sku("Ножевой блок для триммера JRL 2025T", RRP) is None
+
+
+def test_accessory_detail_cannot_attribute_other_card_price_to_clipper():
+    soup = BeautifulSoup(
+        '<h1>Зарядная подставка JRL для машинок 2020C, 2020T</h1>'
+        '<div class="product-card"><a href="/clipper">JRL FF2020C</a><span>2 200 ₽</span></div>',
+        "html.parser",
+    )
+    found, _ = extract(soup, "https://jrlrus.ru/aksessuari/zaryadnaya-podstavka", RRP)
+    assert not any(row["sku"] == "2020C" and row["status"] == "MATCHED" for row in found)
+
+
+def test_main_clippers_remain_matchable():
+    assert match_sku("Машинка JRL Fresh Fade 2020C", RRP)["sku"] == "2020C"
+    assert match_sku("Машинка для стрижки JRL FF2020C-B", RRP)["sku"] == "2020C-B"
