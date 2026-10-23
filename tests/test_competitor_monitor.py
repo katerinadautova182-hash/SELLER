@@ -85,3 +85,28 @@ def test_accessory_detail_cannot_attribute_other_card_price_to_clipper():
 def test_main_clippers_remain_matchable():
     assert match_sku("Машинка JRL Fresh Fade 2020C", RRP)["sku"] == "2020C"
     assert match_sku("Машинка для стрижки JRL FF2020C-B", RRP)["sku"] == "2020C-B"
+
+
+def test_accessory_detail_slug_cannot_impersonate_clipper():
+    from competitor_monitor.monitor import url_compatible
+    assert not url_compatible(
+        "https://jrl-pro.ru/product/nabor-dvojnyh-magnitnyh-nasadok-dlya-mashinok-jrl.html",
+        "2020C",
+    )
+    assert not url_compatible(
+        "https://jrlrus.ru/aksessuari/prochie-aksessuari/zaryadnaya-podstavka-jrl-2020c",
+        "2020C",
+    )
+    assert url_compatible("https://jrl-pro.ru/product/onyx-2020c-b.html", "2020C-B")
+    assert url_compatible(
+        "https://jrl-pro.ru/product/nozhevoj-blok-dlya-trimmera-jrl-2025t-jrl-sf11.html",
+        "SF11",
+    )
+
+
+def test_accessory_page_no_false_device_even_without_h1():
+    soup = BeautifulSoup(
+        '<div class="product-card"><a href="/product/nabor-dvojnyh-magnitnyh-nasadok-dlya-mashinok-jrl.html">'
+        'JRL FF2020C</a><span>2 090 ₽</span></div>', "html.parser")
+    rows, _ = extract(soup, "https://jrl-pro.ru/", RRP)
+    assert not any(r["sku"] == "2020C" and r["status"] == "MATCHED" for r in rows)
