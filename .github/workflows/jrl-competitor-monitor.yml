@@ -39,15 +39,15 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m competitor_monitor.monitor
-      - name: TEST - send four clearly labeled Telegram messages
-        if: "github.event_name == 'push' && startsWith(github.event.head_commit.message, 'test: competitor-monitor telegram')"
+      - name: Send clean individual Telegram reports when explicitly requested
+        if: "github.event_name == 'push' && startsWith(github.event.head_commit.message, 'send: competitor-monitor telegram')"
         env:
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python -m competitor_monitor.monitor --test --max-products 8 --delay 0.2
+        run: python -m competitor_monitor.monitor --max-products 8 --delay 0.2
       - name: Smoke check public sites without Telegram on feature branch
-        if: "github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'test: competitor-monitor telegram')"
+        if: "github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'send: competitor-monitor telegram')"
         env:
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
         run: python -m competitor_monitor.monitor --no-telegram --max-products 8 --delay 0.2
