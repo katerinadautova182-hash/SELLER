@@ -82,7 +82,8 @@ def load_rrp() -> dict[str, dict]:
 
 
 def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
-    normalized = str(name).upper().translate(str.maketrans({
+    original = str(name).upper()
+    normalized = original.translate(str.maketrans({
         "С": "C", "В": "B", "Т": "T", "Н": "H", "О": "O",
         "А": "A", "Х": "X", "Е": "E", "К": "K", "М": "M", "Р": "P", "У": "Y"
     }))
@@ -96,7 +97,7 @@ def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
         chunks = re.findall(r"[A-Z0-9]+", normalized_sku)
         return r"[-\s_/]*".join(re.escape(part) for part in chunks)
 
-    is_bundle = bool(BUNDLE.search(normalized))
+    is_bundle = bool(BUNDLE.search(original))
     for sku in sorted(rrp, key=len, reverse=True):
         item = rrp[sku]
         if len(sku) < 4:
@@ -117,10 +118,10 @@ def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
                                              re.search(r"\b2025C\b", normalized)):
             continue
         for color, code in colors.items():
-            if code not in rrp:
+            if clean_code(code) not in rrp:
                 continue
-            if any(word in normalized for word in COLOR_WORDS[color]):
-                return rrp[code]
+            if any(word in original or word in normalized for word in COLOR_WORDS[color]):
+                return rrp[clean_code(code)]
     if re.search(r"(?<![A-Z0-9])1040(?![A-Z0-9])", squashed) and "FR1040" in rrp:
         return rrp["FR1040"]
     return None
@@ -171,7 +172,7 @@ def internal_url(base: str, href: str | None) -> str | None:
 
 def name_and_link(node, page_url: str) -> tuple[str, str]:
     # Headings and model-bearing links are more reliable than paragraphs of descriptions.
-    candidates = node.select("h1,h2,h3,h4,h5,[itemprop='name'],.product-title,.product__title,a")
+    candidates = node.select("h1,h2,h3,h4,h5,[itemprop='name'],.product-title,.product__title,.t-name,.t-title,[class*='title'],b,strong,a")
     for element in candidates:
         title = clean_title(element.get_text(" ", strip=True))
         if TITLE_SKU.search(title) and 6 <= len(title) <= 180:
@@ -182,6 +183,16 @@ def name_and_link(node, page_url: str) -> tuple[str, str]:
                     if link and link != page_url:
                         break
             return title, link or page_url
+    for piece in node.stripped_strings:
+        title = clean_title(str(piece))
+        if TITLE_SKU.search(title) and 6 <= len(title) <= 180:
+            link = page_url
+            for a in node.find_all("a", href=True):
+                resolved = internal_url(page_url, a.get("href"))
+                if resolved and resolved != page_url:
+                    link = resolved
+                    break
+            return title, link
     return "", page_url
 
 
