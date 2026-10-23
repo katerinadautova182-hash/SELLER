@@ -500,91 +500,80 @@ def fmt(amount: float) -> str:
     return f"{amount:,.0f}".replace(",", " ")
 
 
-def product_lines(row: dict, *, include_link: bool) -> list[str]:
-    """Readable, auditable comparison: product name, selling price and official RRP."""
+def product_lines(row: dict, *, include_link: bool = True) -> list[str]:
+    """Product name, price on competitor site, official RRP and difference."""
     name = clean_title(str(row.get("name") or row.get("sku") or "Без названия"))
-    if len(name) > 105:
-        name = name[:102].rstrip() + "..."
+    if len(name) > 120:
+        name = name[:117].rstrip() + "..."
     sku = str(row.get("sku") or "").strip()
-    price = float(row["price"])
-    rrp = float(row["rrp"])
+    price, rrp = float(row["price"]), float(row["rrp"])
     delta = round(price - rrp, 2)
-    signal = "🔴" if delta < 0 else "✅"
-    label = f"{signal} {name}" + (f" (арт. {sku})" if sku else "")
-    amounts = f"Цена на сайте: {fmt(price)} ₽ | РРЦ: {fmt(rrp)} ₽"
+    label = f"• {name}" + (f" — арт. {sku}" if sku else "")
+    lines = [label, f"Цена на сайте: {fmt(price)} ₽",
+             f"РРЦ: {fmt(rrp)} ₽"]
     if delta < 0:
-        amounts += f" | ниже на {fmt(-delta)} ₽"
+        lines.append(f"Ниже РРЦ на {fmt(-delta)} ₽")
     elif delta > 0:
-        amounts += f" | выше на {fmt(delta)} ₽"
+        lines.append(f"Выше РРЦ на {fmt(delta)} ₽")
     else:
-        amounts += " | соответствует РРЦ"
-    result = [label, amounts]
+        lines.append("Цена равна РРЦ")
     if include_link and row.get("url"):
-        result.append(row["url"])
-    return result
+        lines.append(row["url"])
+    return lines
 
 
 def format_report(report: dict, *, max_chars: int | None = 3850,
-                  include_all_links: bool = False) -> str:
-    """One Telegram message per site, or an unlimited readable full audit.
+                  include_all_links: bool = True,
+                  only_violations: bool = True) -> str:
+    """Manager-facing: only reliable prices, no debug diagnostics.
 
-    Violations have priority. Never cut a product midway or hide how many
-    confirmed comparisons couldn't fit Telegram's single-message limit.
+    The full audit stays in CSV/JSON and per-site text attachments.
+    Never silently truncate an item's displayed price, name or URL.
     """
-    items = report.get("items") or []
-    violations = sorted((r for r in items if float(r["price"]) < float(r["rrp"])),
-                        key=lambda r: (float(r["price"]) - float(r["rrp"]), r["sku"]))
-    compliant = sorted((r for r in items if float(r["price"]) >= float(r["rrp"])),
-                       key=lambda r: r["sku"])
-    lines = [f"JRL — {report['site']}",
+    items = [r for r in (report.get("items") or [])
+             if r.get("sku") and r.get("price") is not None and r.get("rrp") is not None]
+    below = sorted(
+        [r for r in items if float(r["price"]) < float(r["rrp"])],
+        key=lambda r: (float(r["price"]) - float(r["rrp"]), str(r["sku"])),
+    )
+    above = sorted(
+        [r for r in items if float(r["price"]) >= float(r["rrp"])],
+        key=lambda r: str(r["sku"]),
+    )
+    lines = [f"Контроль РРЦ JRL — {report['site']}",
              f"Сайт: {report['url']}",
-             f"Сопоставлено товаров: {len(items)} | Ниже РРЦ: {len(violations)}",
-             f"Проверено страниц: {report['pages_ok']}/{report['pages_attempted']}"]
-    errors = report.get("errors") or []
-    unresolved = report.get("unresolved") or []
-    conflicts = sum(bool(r.get("price_conflict")) for r in items)
-    status = []
-    if conflicts:
-        status.append(f"Разные цены на страницах: {conflicts} (указана минимальная)")
-    if unresolved:
-        status.append(f"Неоднозначных/без цены: {len(unresolved)} наблюдений")
-    if errors:
-        status.append(f"Ошибок доступа: {len(errors)}")
-        status.append(f"Первая ошибка: {str(errors[0])[:110]}")
+             f"Проверено товаров: {len(items)}",
+             f"Ниже РРЦ: {len(below)}"]
     if not items:
-        status.insert(0, "ВНИМАНИЕ: проверка НЕ завершена. Нет подтверждённых "
-                        "сопоставлений, нельзя делать вывод об отсутствии нарушений.")
-    else:
-        status.append("Полный список товаров, цены и ссылки: файлы отчёта в GitHub Actions.")
+        lines += ["", "Не удалось получить подтверждённые цены. Вывод о соблюдении РРЦ невозможен."]
+        return "\n".join(lines)
+    if not below:
+        lines += ["", "Цен ниже РРЦ среди проверенных товаров не обнаружено."]
+    if report.get("errors"):
+        lines += ["", "Часть страниц сайта была недоступна — проверка неполная."]
 
-    if not violations and items:
-        lines.append("Цен ниже РРЦ среди сопоставленных товаров не найдено.")
-
-    # Reserve room for status and overflow counter before adding product lines.
-    footer_budget = len("\n".join(status)) + 115
+    sections = [("ТОВАРЫ НИЖЕ РРЦ", below)]
+    if not only_violations:
+        sections.append(("ОСТАЛЬНЫЕ ПРОВЕРЕННЫЕ ТОВАРЫ", above))
     omitted = 0
-    for title, section in (("🔴 НИЖЕ РРЦ", violations),
-                           ("✅ ПО РРЦ И ВЫШЕ", compliant)):
-        heading_added = False
+    reserved = 90
+    for title, section in sections:
+        heading_written = False
         for row in section:
-            details = product_lines(row, include_link=include_all_links or
-                                    float(row["price"]) < float(row["rrp"]))
-            addition = (["", title] if not heading_added else [""]) + details
-            proposal = "\n".join(lines + addition)
-            if max_chars is not None and len(proposal) + footer_budget > max_chars:
+            details = product_lines(row, include_link=include_all_links)
+            addition = (["", title] if not heading_written else [""]) + details
+            proposed = "\n".join(lines + addition)
+            if max_chars is not None and len(proposed) + reserved > max_chars:
                 omitted += 1
                 continue
             lines.extend(addition)
-            heading_added = True
+            heading_written = True
 
     if omitted:
-        lines.append(f"Не поместилось в Telegram: {omitted} товаров. "
-                     "Все позиции — в полном отчёте GitHub Actions.")
-    if status:
-        lines.extend([""] + status)
+        lines += ["", f"Остальные позиции: {omitted} — в полном отчёте."]
     result = "\n".join(lines)
     if max_chars is not None and len(result) > max_chars:
-        raise ValueError("Отчёт превысил лимит Telegram; нельзя обрезать товар посередине")
+        raise ValueError("Нельзя отправить сообщение целиком: превышен лимит Telegram")
     return result
 
 
@@ -595,7 +584,8 @@ def save_reports(folder: Path, reports: list[dict]) -> None:
     for report in reports:
         slug = re.sub(r"[^a-z0-9]+", "-", str(report["site"]).lower()).strip("-") or "site"
         (folder / f"{slug}.txt").write_text(
-            format_report(report, max_chars=None, include_all_links=True) + "\n",
+            format_report(report, max_chars=None, include_all_links=True,
+                          only_violations=False) + "\n",
             encoding="utf-8",
         )
     fields = ["site", "sku", "name", "price", "rrp", "delta", "difference_pct",
