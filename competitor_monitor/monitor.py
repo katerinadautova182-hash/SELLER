@@ -507,48 +507,96 @@ def fmt(amount: float) -> str:
     return f"{amount:,.0f}".replace(",", " ")
 
 
-def format_report(report: dict) -> str:
-    v = report["violations"]
-    name = report["site"]
-    legal = report.get("legal_entity") or "Юрлицо не установлено"
-    if not report.get("verified", True):
-        legal += " (реквизиты требуют подтверждения)"
-    lines = [f"{report['url'].replace('https://', '').replace('http://', '').rstrip('/')} — {legal}",
-             f"Товаров с подтверждённым SKU и ценой: {len(report['items'])}",
-             f"Ниже РРЦ: {len(v)}",
-             f"Проверено страниц: {report['pages_ok']}/{report['pages_attempted']}"]
-    if report["errors"]:
-        lines.append(f"Ошибки/недоступные страницы: {len(report['errors'])}")
-    conflicts = sum(bool(r["price_conflict"]) for r in report["items"])
-    if conflicts:
-        lines.append(f"Расхождения между страницами: {conflicts} (в отчёте минимальная цена)")
-    if v:
-        lines.append("")
-        lines.append("ПОЗИЦИИ НИЖЕ РРЦ:")
-        for row in v[:18]:
-            lines.append(f"• {row['sku']}: {fmt(row['price'])} ₽ / РРЦ {fmt(row['rrp'])} ₽ "
-                         f"(−{fmt(-row['delta'])} ₽, {row['difference_pct']:.1f}%)")
-            lines.append(row["url"])
-        if len(v) > 18:
-            lines.append(f"Ещё {len(v)-18} позиций — в CSV отчёте GitHub Actions.")
+def product_lines(row: dict, *, include_link: bool = True) -> list[str]:
+    """Product name, price on competitor site, official RRP and difference."""
+    name = clean_title(str(row.get("name") or row.get("sku") or "Без названия"))
+    if len(name) > 120:
+        name = name[:117].rstrip() + "..."
+    sku = str(row.get("sku") or "").strip()
+    price, rrp = float(row["price"]), float(row["rrp"])
+    delta = round(price - rrp, 2)
+    label = f"• {name}" + (f" — арт. {sku}" if sku else "")
+    lines = [label, f"Цена на сайте: {fmt(price)} ₽",
+             f"РРЦ: {fmt(rrp)} ₽"]
+    if delta < 0:
+        lines.append(f"Ниже РРЦ на {fmt(-delta)} ₽")
+    elif delta > 0:
+        lines.append(f"Выше РРЦ на {fmt(delta)} ₽")
     else:
-        if report["pages_ok"] == 0 or not report["items"]:
-            lines.append("")
-            lines.append("ВНИМАНИЕ: проверка НЕ завершена. Нет подтверждённых сопоставлений, "
-                         "нельзя делать вывод об отсутствии нарушений.")
-        else:
-            lines.append("")
-            lines.append("По сопоставленным товарам цен ниже РРЦ не обнаружено.")
-    if report["errors"]:
-        lines.append(f"Пример ошибки: {report['errors'][0][:160]}")
-    msg = "\n".join(lines)
-    return msg[:3850]
+        lines.append("Цена равна РРЦ")
+    if include_link and row.get("url"):
+        lines.append(row["url"])
+    return lines
+
+
+def format_report(report: dict, *, max_chars: int | None = 3850,
+                  include_all_links: bool = True,
+                  only_violations: bool = True) -> str:
+    """Manager-facing: only reliable prices, no debug diagnostics.
+
+    The full audit stays in CSV/JSON and per-site text attachments.
+    Never silently truncate an item's displayed price, name or URL.
+    """
+    items = [r for r in (report.get("items") or [])
+             if r.get("sku") and r.get("price") is not None and r.get("rrp") is not None]
+    below = sorted(
+        [r for r in items if float(r["price"]) < float(r["rrp"])],
+        key=lambda r: (float(r["price"]) - float(r["rrp"]), str(r["sku"])),
+    )
+    above = sorted(
+        [r for r in items if float(r["price"]) >= float(r["rrp"])],
+        key=lambda r: str(r["sku"]),
+    )
+    domain = urlparse(report["url"]).netloc.removeprefix("www.")
+    owner = str(report.get("legal_entity") or "Юридическое лицо не установлено")
+    if not report.get("verified", True):
+        owner += " (реквизиты требуют подтверждения)"
+    lines = [f"{domain} — {owner}",
+             f"Контроль РРЦ JRL | проверено товаров: {len(items)}",
+             f"Ниже РРЦ: {len(below)}"]
+    if not items:
+        lines += ["", "ВНИМАНИЕ: проверка НЕ завершена. Нет подтверждённых цен. Вывод о соблюдении РРЦ невозможен."]
+        return "\n".join(lines)
+    if not below:
+        lines += ["", "Цен ниже РРЦ среди проверенных товаров не обнаружено."]
+    if report.get("errors"):
+        lines += ["", "Часть страниц сайта была недоступна — проверка неполная."]
+
+    sections = [("ТОВАРЫ НИЖЕ РРЦ", below)]
+    if not only_violations:
+        sections.append(("ОСТАЛЬНЫЕ ПРОВЕРЕННЫЕ ТОВАРЫ", above))
+    omitted = 0
+    reserved = 90
+    for title, section in sections:
+        heading_written = False
+        for row in section:
+            details = product_lines(row, include_link=include_all_links)
+            addition = (["", title] if not heading_written else [""]) + details
+            proposed = "\n".join(lines + addition)
+            if max_chars is not None and len(proposed) + reserved > max_chars:
+                omitted += 1
+                continue
+            lines.extend(addition)
+            heading_written = True
+
+    if omitted:
+        lines += ["", f"Остальные позиции: {omitted} — в полном отчёте."]
+    result = "\n".join(lines)
+    if max_chars is not None and len(result) > max_chars:
+        raise ValueError("Нельзя отправить сообщение целиком: превышен лимит Telegram")
+    return result
 
 
 def save_reports(folder: Path, reports: list[dict]) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "jrl_monitor.json").write_text(json.dumps(reports, ensure_ascii=False, indent=2),
                                               encoding="utf-8")
+    for report in reports:
+        slug = re.sub(r"[^a-z0-9]+", "-", str(report["site"]).lower()).strip("-") or "site"
+        (folder / f"{slug}.txt").write_text(
+            format_report(report, max_chars=None, include_all_links=True,
+                          only_violations=False) + "\n", encoding="utf-8",
+        )
     fields = ["site", "sku", "name", "price", "rrp", "delta", "difference_pct",
               "url", "status", "source", "price_conflict", "all_observed_prices"]
     with (folder / "jrl_monitor.csv").open("w", encoding="utf-8-sig", newline="") as handle:
@@ -593,7 +641,10 @@ def main() -> int:
             if not send_telegram(message):
                 print("Telegram не настроен; сообщение не отправлено.", flush=True)
     save_reports(Path(args.out), reports)
-    return 1 if any(r["pages_ok"] == 0 or not r["items"] for r in reports) else 0
+    incomplete = [r["site"] for r in reports if not r["items"]]
+    if incomplete:
+        print("Не удалось подтвердить цены в: " + ", ".join(incomplete), flush=True)
+    return 1 if not any(r["items"] for r in reports) else 0
 
 
 if __name__ == "__main__":

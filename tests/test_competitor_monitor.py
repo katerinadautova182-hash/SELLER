@@ -130,3 +130,47 @@ def test_site_count_and_legal_data_saved():
     assert len(sites) == 8
     assert len({site["url"] for site in sites}) == 8
     assert all(site.get("legal_entity") and site.get("inn") for site in sites)
+
+
+def test_forwardable_report_lists_product_price_and_rrp():
+    row = {"sku": "2020C-B", "name": "Машинка JRL ONYX 2020C-B",
+           "price": 17990, "rrp": 18760,
+           "url": "https://barberkit.ru/onyx", "price_conflict": False}
+    ok = {"sku": "2020C", "name": "Машинка JRL Fresh Fade 2020C",
+          "price": 15000, "rrp": 14070,
+          "url": "https://barberkit.ru/fade", "price_conflict": False}
+    report = {"site": "BarberKit", "url": "https://barberkit.ru/",
+              "legal_entity": "ИП Хайбуллин Альберт Артурович",
+              "verified": True, "items": [row, ok], "violations": [row],
+              "pages_ok": 12, "pages_attempted": 12,
+              "errors": [], "unresolved": [{"status": "UNMATCHED_SKU"}]}
+    msg = format_report(report)
+    assert msg.startswith("barberkit.ru — ИП Хайбуллин Альберт Артурович")
+    assert "Машинка JRL ONYX 2020C-B" in msg
+    assert "Цена на сайте: 17 990 ₽" in msg
+    assert "РРЦ: 18 760 ₽" in msg
+    assert "Ниже РРЦ на 770 ₽" in msg
+    assert "https://barberkit.ru/onyx" in msg
+    assert "Машинка JRL Fresh Fade" not in msg
+    assert "БЕЗ НАДЁЖНОГО" not in msg.upper()
+    assert "БЕЗ НАДЕЖНОГО" not in msg.upper()
+    assert "ТЕСТОВ" not in msg.upper()
+    assert "GitHub Actions" not in msg
+
+    full = format_report(report, max_chars=None, only_violations=False)
+    assert "Машинка JRL Fresh Fade" in full
+
+
+def test_forwardable_telegram_report_never_cuts_mid_product():
+    row = {"sku": "2020C-B", "name": "Машинка JRL ONYX 2020C-B",
+           "price": 17990, "rrp": 18760,
+           "url": "https://example.ru/onyx", "price_conflict": False}
+    items = [{**row, "sku": f"SKU{i}"} for i in range(300)]
+    report = {"site": "Shop", "url": "https://example.ru/",
+              "legal_entity": "ООО «Магазин»", "verified": True,
+              "items": items, "violations": items, "unresolved": [],
+              "pages_ok": 3, "pages_attempted": 3, "errors": []}
+    msg = format_report(report)
+    assert len(msg) <= 3850
+    assert "Остальные позиции:" in msg
+    assert msg.count("Цена на сайте:") == msg.count("\nРРЦ: ")
