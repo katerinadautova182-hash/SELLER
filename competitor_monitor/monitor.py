@@ -20,7 +20,7 @@ from urllib3.util.retry import Retry
 
 from ozon_agent.telegram import send_telegram
 
-PRICE_RE = re.compile(r"(?<!\d)(\d{1,3}(?:[\s\u00a0\u202f]?\d{3})+(?:[.,]\d{1,2})?|\d{3,6}(?:[.,]\d{1,2})?)\s*(?:₽|руб(?:\.|\b)|р\.)", re.I)
+PRICE_RE = re.compile(r"(?<!\d)(\d{1,3}(?:[\s\u00a0\u202f.]?\d{3})+(?:[.,]\d{1,2})?|\d{3,6}(?:[.,]\d{1,2})?)\s*(?:₽|руб(?:\.|\b)|р\.)", re.I)
 OLD_MARKERS = ("old-price", "price-old", "old_price", "price_old", "oldprice",
                "price--old", "price__old", "was-price", "price-was")
 CARD_SELECTORS = (
@@ -138,7 +138,10 @@ def current_prices(node) -> list[float]:
     text = fragment.get_text(" ", strip=True).replace("\u202f", " ")
     amounts = []
     for match in PRICE_RE.finditer(text):
-        amount = float(match.group(1).replace(" ", "").replace("\xa0", "").replace(",", "."))
+        token = match.group(1).replace(" ", "").replace("\xa0", "").replace("\u202f", "")
+        if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", token):
+            token = token.replace(".", "")
+        amount = float(token.replace(",", "."))
         if 80 <= amount <= 500000:
             amounts.append(amount)
     return amounts
@@ -275,6 +278,24 @@ def extract(soup: BeautifulSoup, url: str, rrp: dict) -> tuple[list[dict], list[
                 break
             if len(text) >= len(raw) and PRICE_RE.search(text):
                 row = candidate(parent, url, rrp, "near-title")
+                if row:
+                    results.append(row)
+                break
+
+    # Plain div-based cards also occur on custom storefronts. Locate a price text
+    # and walk upward only until a single product title can be resolved.
+    for text_node in soup.find_all(string=PRICE_RE):
+        parent = text_node.parent
+        if parent is None or any(a.name in ("s", "strike", "del") for a in [parent, *list(parent.parents)[:3]]):
+            continue
+        for block in [parent, *list(parent.parents)[:7]]:
+            if block.name in ("body", "html", "header", "footer", "nav"):
+                break
+            block_text = block.get_text(" ", strip=True)
+            if len(block_text) > 1400:
+                break
+            if TITLE_SKU.search(block_text):
+                row = candidate(block, url, rrp, "near-price")
                 if row:
                     results.append(row)
                 break
