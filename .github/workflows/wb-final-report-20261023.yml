@@ -1,0 +1,53 @@
+name: WB final report 23 Oct 2026 (read-only)
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/wb-final-report-20261023.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify both WB upload tasks and send Telegram result
+        env:
+          WB_API_KEY: ${{ secrets.WB_API_KEY }}
+          TELEGRAM_WB_BOT_TOKEN: ${{ secrets.TELEGRAM_WB_BOT_TOKEN }}
+          TELEGRAM_WB_CHAT_ID: ${{ secrets.TELEGRAM_WB_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          import os, json, urllib.request, urllib.parse
+          ids=(157455582,157455694)
+          wb=os.environ["WB_API_KEY"]
+          statuses=[]
+          for task_id in ids:
+              q=urllib.parse.urlencode({"uploadID": task_id})
+              req=urllib.request.Request("https://discounts-prices-api.wildberries.ru/api/v2/history/tasks?"+q,
+                  headers={"Authorization": wb, "Accept":"application/json"})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as response:
+                      payload=json.load(response)
+                  obj=payload.get("data") or {}
+                  state=int(obj.get("status") or 0)
+                  total=int(obj.get("overAllGoodsNumber") or 0)
+                  ok=int(obj.get("successGoodsNumber") or 0)
+                  label="ОБРАБОТАНО" if state==3 and total>0 and ok==total else "НЕ ПОДТВЕРЖДЕНО"
+                  statuses.append(f"Задание {task_id}: {label}; принято {ok}/{total}; статус WB {state}")
+              except Exception as e:
+                  statuses.append(f"Задание {task_id}: история WB недоступна ({type(e).__name__})")
+          msg="WB — итог двух проходов, 23.10.2026\n"+"\n".join(statuses)
+          msg+="\nОтправлено на изменение: 30 + 19 = 49 SKU.\n"
+          msg+="Другие: 73 OK по скану 22.10; 75 ручная проверка; 63 ошибки чтения в исходной выгрузке.\n"
+          msg+="ВНИМАНИЕ: обработка задания WB не подтверждает итоговую цену ПОКУПАТЕЛЯ. Нужен новый скан витрины."
+          body=urllib.parse.urlencode({"chat_id":os.environ["TELEGRAM_WB_CHAT_ID"],"text":msg}).encode()
+          url="https://api.telegram.org/bot"+os.environ["TELEGRAM_WB_BOT_TOKEN"]+"/sendMessage"
+          with urllib.request.urlopen(urllib.request.Request(url,data=body,method="POST"),timeout=30) as resp:
+              answer=json.load(resp)
+          if not answer.get("ok"): raise RuntimeError("Telegram did not accept report")
+          print("Two WB tasks verified as far as official history permits; final Telegram report sent.")
+          print("\n".join(statuses))
+          PY
