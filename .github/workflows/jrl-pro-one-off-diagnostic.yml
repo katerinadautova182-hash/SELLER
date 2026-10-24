@@ -1,0 +1,47 @@
+name: JRL Pro one-off access diagnostic
+on:
+  push:
+    branches:
+      - claude/ozon-seller-product-export-nubra0
+    paths:
+      - ".github/workflows/jrl-pro-one-off-diagnostic.yml"
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests beautifulsoup4
+      - name: Diagnose site and inspect reliable JRL prices
+        run: |
+          python - <<'PY'
+          import requests, json
+          from competitor_monitor.monitor import load_rrp, scan_site, session_with_retries
+          from competitor_monitor.reference_rrp import validate_rrp_reference
+          urls = [
+            'https://jrl-pro.ru/',
+            'https://jrl-pro.ru/product/onyx-2020c-b.html',
+            'https://jrl-pro.ru/product/trimmer-dlya-strizhki-jrl-diamante-2025tb-black.html'
+          ]
+          session = session_with_retries()
+          for url in urls:
+              try:
+                  res = session.get(url, timeout=20)
+                  print("HTTP",res.status_code,"length",len(res.content),"redirect",res.url,"server",res.headers.get("server"),"body_prefix",res.text[:100].replace("\n"," "))
+              except Exception as exc:
+                  print("HTTP ERROR",url,type(exc).__name__,str(exc)[:400])
+          rrp = load_rrp()
+          validate_rrp_reference(rrp)
+          site = next(s for s in json.load(open("competitor_monitor/sites.json", encoding="utf8"))["sites"] if s["name"]=="JRL Pro")
+          site["max_product_pages"] = 12
+          report = scan_site(site,rrp,0.1)
+          print("SCAN",json.dumps({k:v for k,v in report.items() if k not in ("items","unresolved","violations")},ensure_ascii=False))
+          print("ITEMS",len(report["items"]),"VIOLATIONS",len(report["violations"]))
+          for item in report["items"][:20]:
+              print("ITEM",item["sku"],item["price"],"RRP",item["rrp"],"LINK",item["url"])
+          PY
