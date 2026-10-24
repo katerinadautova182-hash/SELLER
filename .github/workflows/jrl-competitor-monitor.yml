@@ -7,13 +7,6 @@ on:
     - cron: "7 6 * * *"
     - cron: "37 6 * * *"
   workflow_dispatch:
-  # Temporary one-shot end-to-end Telegram delivery test.
-  # Remove this push trigger after the test has been verified.
-  push:
-    branches:
-      - claude/ozon-seller-product-export-nubra0
-    paths:
-      - ".github/workflows/jrl-competitor-monitor.yml"
 
 permissions:
   contents: read
