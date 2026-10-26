@@ -225,3 +225,17 @@ def test_shevelura_url_and_legal_info():
     shops = {x["name"]: x for x in cfg["sites"]}
     assert shops["Shevelura23"]["inn"] == "290221495001"
     assert shops["Shevelura23"]["legal_entity"] == "ИП Зотова Эрика Олеговна"
+
+
+def test_actual_barberkit_false_matches_never_classed_as_clippers():
+    from competitor_monitor.monitor import is_compatible, url_compatible
+    assert not is_compatible(
+        "Лезвие Fade Precision FF2020C - прецизионное лезвие для плавных переходов", "2020C")
+    assert not is_compatible(
+        "ПОДОЙДЕТ ДЛЯ МОДЕЛЕЙ: JRL FF 2020C, JRL FF 2020C-G", "2020C-G")
+    assert not is_compatible("АРТИКУЛ: FF2020T", "2020T")
+    assert not is_compatible("ПОДОЙДЕТ ДЛЯ МОДЕЛЕЙ: JRL FF2020T-G", "2020T-G")
+    assert not url_compatible("https://barberkit.ru/fade_2020c", "2020C")
+    assert not url_compatible("https://barberkit.ru/2020tg_blade", "2020T-G")
+    assert is_compatible("JRL Onyx FreshFade 2020T-B", "2020T-B")
+    assert is_compatible("Машинка JRL FF2020C с регулировкой ножа", "2020C")
