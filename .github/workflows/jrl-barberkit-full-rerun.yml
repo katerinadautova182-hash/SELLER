@@ -5,6 +5,8 @@ on:
       - feature/jrl-exhaustive-crawl-and-strict-types-20261026
     paths:
       - ".github/workflows/jrl-barberkit-full-rerun.yml"
+      - "tests/test_competitor_monitor.py"
+      - "competitor_monitor/**"
   workflow_dispatch:
 permissions:
   contents: read
