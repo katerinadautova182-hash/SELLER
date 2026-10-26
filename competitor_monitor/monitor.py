@@ -650,6 +650,7 @@ def main() -> int:
             entry = {**site, "max_product_pages": args.max_products} if args.max_products is not None else site
             result = scan_site(entry, rrp, args.delay)
         except Exception as exc:
+            print(f"ОШИБКА СКАНЕРА {site['name']}: {type(exc).__name__}: {exc}", flush=True)
             result = {"coverage": "INCOMPLETE", "is_complete": False,
                       "site": site.get("name", site["url"]), "url": site["url"],
                       "legal_entity": site.get("legal_entity"), "inn": site.get("inn"),
@@ -657,6 +658,9 @@ def main() -> int:
                       "items": [], "violations": [], "unresolved": [],
                       "pages_ok": 0, "pages_attempted": 0, "errors": [repr(exc)]}
         reports.append(result)
+        if result.get("errors"):
+            print(f"ДИАГНОСТИКА {site['name']}: "
+                  + " | ".join(result["errors"][:18]), flush=True)
         message = format_report(result)
         print(message, "\n" + "-" * 50, flush=True)
         # Exactly one Telegram text message per configured site, including empty/error results.
