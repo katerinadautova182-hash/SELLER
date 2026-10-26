@@ -94,6 +94,73 @@ MAIN_MACHINE_CODE = re.compile(
 )
 BUNDLE_CODES = ("GH2024", "ONYX2024", "2020C2020T")
 
+# Curated categories: clippers, trimmers, dryers, curling irons and tongs.
+# RRPs for shavers, blades, combs, brushes and accessories must be ignored.
+EQUIPMENT_CODE = re.compile(
+    r"^(?:2020[CT][A-Z0-9]*|2025[CT][A-Z0-9]*|3000C[A-Z0-9]*|"
+    r"FR10(?:90|40|50)|GH2024[0-9]*|ONYX2024|"
+    r"FP(?:2401|2020L)[A-Z0-9]*|JRLBA22020L|"
+    r"CY2025L[A-Z]*|CYCLONE3800|PHANTOM3300A|FEATHER3660[A-Z]*|"
+    r"JPA[0-9A-Z]*|Q4[0-9A-Z]*|F428D?)$"
+)
+ACCESSORY_TITLE = re.compile(
+    r"(?i)лезви[ея]|ножев\\w*\\s+блок|(?:сменн\\w*\\s+)?нож\\s+для|"
+    r"подойд[её]т\\s+для|подходит\\s+для|совместим\\w*\\s+с|"
+    r"насад\\w*\\s+(?:для|на)\\s+машин|"
+    r"зарядн\\w*\\s+(?:станц|подстав|баз)|док[- ]?станц|"
+    r"щ[её]тка[- ]?см[её]тка|расч[её]ска\\s+JRL|"
+    r"\\bblade\\s+for|\\bguard\\s+for|"
+    r"(?:фильтр|батарея|аккумулятор|шнур|провод|диффузор)\\s+для"
+)
+DEVICE_TITLE = re.compile(
+    r"(?i)машинк|триммер|фен|плойк|щипц|стайлер|"
+    r"\\b(?:clipper|trimmer|dryer|curler|curling|iron|forte\\s+pro|"
+    r"vortice|freshfade|diamante|onyx)\\b"
+)
+
+
+def is_equipment_code(sku: str) -> bool:
+    return bool(EQUIPMENT_CODE.fullmatch(clean_code(sku)))
+
+
+def is_equipment_title(title: str) -> bool:
+    text = clean_title(title)
+    if ACCESSORY_TITLE.search(text) or ACCESSORY_WORDS.search(text):
+        return False
+    # Some catalogue cards list a model instead of a generic equipment name.
+    return bool(DEVICE_TITLE.search(text) or re.search(
+        r"(?i)\\b(?:JRL|FF)[ -]*(?:2020[CT]|2025[CT]|3000C|FR10[459]0|FP2401|CY2025L)", text
+    ))
+
+
+def equipment_alias(name: str, rrp: dict) -> dict | None:
+    """Verified Forte Pro colour family, Vortice colour variants.
+
+    Retail catalogue identifiers FP2020H/FP2020HW are also used for Forte Pro
+    H units marketed with the FP2401B/FP2401-W reference-series prices.
+    A named dryer bundled with complimentary brushes remains a dryer offer.
+    """
+    text = name.upper()
+    if not is_equipment_title(name):
+        return None
+    if "FORTE" in text and "PRO" in text and "LITE" not in text:
+        if re.search(r"(?i)БЕЛ|WHITE|FP2020HW", name):
+            code = "FP2401-W"
+        elif re.search(r"(?i)СИН|ГОЛУБ|BLUE|FP2020HD", name):
+            code = "FP2401HD"
+        elif re.search(r"(?i)ЧЕРН|BLACK|СЕРЫ|FP2020H|PROFESSIONAL", name):
+            code = "FP2401B"
+        else:
+            return None
+        return rrp.get(clean_code(code))
+    if "VORTICE" in text:
+        if re.search(r"(?i)БЕЛ|WHITE", name):
+            return rrp.get(clean_code("CY2025LW"))
+        if re.search(r"(?i)ЧЕРН|BLACK", name):
+            return rrp.get(clean_code("CY2025LB"))
+    return None
+
+
 
 def is_compatible(name: str, sku: str) -> bool:
     """Reject obvious wrong product families, not just matching model references."""
@@ -130,6 +197,9 @@ def url_compatible(url: str, sku: str) -> bool:
 
 def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
     original = str(name).upper()
+    if not is_equipment_title(name):
+        return None
+    rrp = {key: row for key, row in rrp.items() if is_equipment_code(row["sku"])}
     normalized = original.translate(str.maketrans({
         "С": "C", "В": "B", "Т": "T", "Н": "H", "О": "O",
         "А": "A", "Х": "X", "Е": "E", "К": "K", "М": "M", "Р": "P", "У": "Y"
@@ -155,6 +225,9 @@ def match_sku(name: str, rrp: dict[str, dict]) -> dict | None:
                    r"(?![-A-Z0-9])")
         if re.search(pattern, normalized) and is_compatible(original, item["sku"]):
             return item
+    alias = equipment_alias(str(name), rrp)
+    if alias is not None:
+        return alias
     if is_bundle:
         return None
 
@@ -246,7 +319,7 @@ def name_and_link(node, page_url: str) -> tuple[str, str]:
 
 def candidate(node, page_url: str, rrp: dict, source: str):
     name, url = name_and_link(node, page_url)
-    if not name:
+    if not name or not is_equipment_title(name):
         return None
     sku = match_sku(name, rrp)
     if sku and not url_compatible(url, sku["sku"]):
@@ -288,7 +361,7 @@ def jsonld_records(soup, url: str, rrp: dict) -> list[dict]:
             if not any(str(t).lower() == "product" for t in types):
                 continue
             name = clean_title(str(obj.get("name") or ""))
-            if not name:
+            if not name or not is_equipment_title(name):
                 continue
             sku = match_sku(" ".join([name, str(obj.get("sku") or "")]), rrp)
             offers = obj.get("offers") or {}
@@ -394,16 +467,19 @@ def extract(soup: BeautifulSoup, url: str, rrp: dict) -> tuple[list[dict], list[
         link = internal_url(url, anchor.get("href"))
         if not link or link == url:
             continue
-        if TITLE_SKU.search(title):
+        if ACCESSORY_SLUG.search(urlparse(link).path):
+            continue
+        if TITLE_SKU.search(title) and is_equipment_title(title):
             links.append(link)
         elif re.search(r"подробнее|смотреть|купить|detail", title, re.I):
             for parent in list(anchor.parents)[:3]:
-                if TITLE_SKU.search(parent.get_text(" ", strip=True)[:500]):
+                block_title = parent.get_text(" ", strip=True)[:400]
+                if TITLE_SKU.search(block_title) and is_equipment_title(block_title):
                     links.append(link)
                     break
     if page_is_accessory or ACCESSORY_SLUG.search(urlparse(url).path):
-        results = [r for r in results if not
-                   (r.get("sku") and MAIN_MACHINE_CODE.match(clean_code(r["sku"])))]
+        # Even related-product widgets on an accessory page are not evidence.
+        results = []
     # Product link can be more specific than its parent catalogue card title.
     for row in results:
         if row.get("sku") and not url_compatible(row.get("url", url), row["sku"]):
@@ -474,6 +550,10 @@ def scan_site(site: dict, rrp: dict, delay: float = 0.8) -> dict:
         visited.add(url)
         time.sleep(delay)
 
+    # No accessory can enter the manager's report through a secondary parser.
+    records = [r for r in records
+               if is_equipment_title(str(r.get("name", "")))
+               and (not r.get("sku") or is_equipment_code(r["sku"]))]
     # One entry per SKU with the lowest reliably visible current price.
     # Keep different advertised prices (catalogue/detail) in the audit.
     matched = defaultdict(list)
@@ -555,12 +635,12 @@ def format_report(report: dict, *, max_chars: int | None = 3850,
              f"Контроль РРЦ JRL | проверено товаров: {len(items)}",
              f"Ниже РРЦ: {len(below)}"]
     if not items:
-        lines += ["", "ВНИМАНИЕ: проверка НЕ завершена. Нет подтверждённых цен. Вывод о соблюдении РРЦ невозможен."]
+        lines += ["", "Нет сопоставленных цен на оборудование — результат по этому сайту не подтверждён."]
         return "\n".join(lines)
     if not below:
         lines += ["", "Цен ниже РРЦ среди проверенных товаров не обнаружено."]
     if report.get("errors"):
-        lines += ["", "Часть страниц сайта была недоступна — проверка неполная."]
+        lines += ["", "Часть страниц недоступна; результаты только по проверенным товарам."]
 
     sections = [("ТОВАРЫ НИЖЕ РРЦ", below)]
     if not only_violations:
