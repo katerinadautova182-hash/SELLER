@@ -1,0 +1,43 @@
+name: JRL deliver complete price audit files
+on:
+  push:
+    branches:
+      - feature/jrl-exhaustive-crawl-and-strict-types-20261026
+    paths:
+      - ".github/workflows/jrl-send-full-telegram-audits.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install requests
+      - name: Download both completed reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 40289978654 --repo "${{ github.repository }}" --name jrl-barberkit-full-audit --dir reports/barberkit
+          gh run download 40289978654 --repo "${{ github.repository }}" --name jrl-shevelura23-full-audit --dir reports/shevelura23
+          test -s reports/barberkit/barberkit.txt
+          test -s reports/shevelura23/shevelura23.txt
+      - name: Send full price lists to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python - <<'PY'
+          from ozon_agent.telegram import send_telegram_document
+          for slug, label in (
+              ("barberkit", "barberkit.ru — все сопоставленные цены JRL и РРЦ; охват неполный (недоступные страницы)"),
+              ("shevelura23", "shevelura23.ru — все сопоставленные цены JRL и РРЦ; охват неполный (динамический каталог)"),
+          ):
+              assert send_telegram_document(f"reports/{slug}/{slug}.txt", caption=label)
+          PY
