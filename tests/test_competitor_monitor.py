@@ -243,3 +243,12 @@ def test_report_not_marked_incomplete_due_to_included_accessories():
     text = format_report(report)
     assert "НЕ завершена" not in text
     assert "не подтверждён" in text
+
+
+def test_sku_label_is_not_a_product_offer():
+    from competitor_monitor.monitor import candidate
+    data = load_rrp()
+    assert candidate(
+        BeautifulSoup("<div><span>АРТИКУЛ: FF2020T</span><span>990 ₽</span></div>", "html.parser").div,
+        "https://barberkit.ru/2020t", data, "detail"
+    ) is None
