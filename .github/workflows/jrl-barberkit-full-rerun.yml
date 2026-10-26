@@ -1,4 +1,4 @@
-name: JRL BarberKit full rerun
+name: JRL BarberKit + Shevelura full catalog audit
 on:
   push:
     branches:
@@ -9,12 +9,20 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: jrl-barberkit-rerun
+  group: jrl-barberkit-shevelura-manual-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - site: barberkit.ru
+            slug: barberkit
+          - site: shevelura23.ru
+            slug: shevelura23
     runs-on: ubuntu-latest
-    timeout-minutes: 32
+    timeout-minutes: 16
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,18 +30,18 @@ jobs:
           python-version: "3.12"
       - name: Dependencies
         run: python -m pip install requests beautifulsoup4 pytest
-      - name: Product-type and pagination regression tests
+      - name: Strict type and pagination tests
         run: python -m pytest -q tests/test_competitor_monitor.py
-      - name: Audit ALL discoverable BarberKit JRL listings
+      - name: Crawl all discoverable products for ${{ matrix.site }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python -m competitor_monitor.monitor --site barberkit.ru --delay 0.15
-      - name: Save full crawl
+        run: python -m competitor_monitor.monitor --site "${{ matrix.site }}" --delay 0.12 --out "artifacts/${{ matrix.slug }}"
+      - name: Full audit artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: barberkit-full-catalog-price-audit
-          path: artifacts/jrl-competitors/
-          retention-days: 30
+          name: "jrl-${{ matrix.slug }}-full-audit"
+          path: "artifacts/${{ matrix.slug }}/"
           if-no-files-found: ignore
+          retention-days: 30
