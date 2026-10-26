@@ -102,6 +102,8 @@ BLADE_TITLE = re.compile(
     r"taper\s+blade|standard\s+blade|replacement\s+blade)\b|"
     r"нож\s+(?:bf\d{2}|sf\d{2}))", re.I
 )
+NON_PRODUCT_HEADING = re.compile(r"^\s*(?:ПОДОЙД[ЕЁ]Т|ПОДХОДИТ|СОВМЕСТИМ|АРТИКУЛ|ХАРАКТЕРИСТИКИ|КОМПЛЕКТАЦИЯ|ОПИСАНИЕ|ДЛЯ МОДЕЛЕЙ|МОДЕЛИ:)", re.I)
+PART_SUBJECT = re.compile(r"^\s*(?:jrl[\s:-]*)?(?:лезви\w*|ножев\w*|нож\b|блок\b|запчаст|насадк|blade\b)", re.I)
 DEVICE_TITLE = re.compile(r"\b(?:машинка|clipper|триммер|trimmer|"
                           r"шейвер|shaver|электробритва)\b", re.I)
 COMB_TITLE = re.compile(r"(?:расч[её]ск|насад\w*|гребень|comb|guard)", re.I)
@@ -140,9 +142,11 @@ def is_compatible(name: str, sku: str) -> bool:
     code = clean_code(sku)
     title = str(name)
     kind = product_type(code)
+    if NON_PRODUCT_HEADING.search(title):
+        return False
     title_starts_as_device = bool(re.match(r"^\s*(?:jrl\s+)?(?:машинк|триммер|шейвер|фен|clipper|trimmer)\w*", title, re.I))
     blade_item = bool(BLADE_TITLE.search(title))
-    accessory_item = bool(ACCESSORY_WORDS.search(title) or blade_item)
+    accessory_item = bool(ACCESSORY_WORDS.search(title) or blade_item or PART_SUBJECT.search(title))
     if kind in ("clipper", "trimmer", "shaver", "dryer") and accessory_item and not title_starts_as_device:
         return False
     # Clipper + trimmer kit is not a blade, spare part or a mere mention
@@ -174,7 +178,7 @@ ACCESSORY_SLUG = re.compile(
     r"(?:nabor[-_]?dvojnyh[-_]?magnitnyh[-_]?nasadok|"
     r"zaryadn|zarjadn|zaryadk|zaryadka|podstavk|nasadok|nasadki|"
     r"nozhevoj[-_]?blok|nozhevoy[-_]?blok|blade[-_]?for|"
-    r"blade[-_]?2020|nozhi/|aksessuari/|accessories/|accessory/)",
+    r"blade[-_]?2020|blade|fade[-_]?2020|nozhi/|aksessuari/|accessories/|accessory/)",
     re.I,
 )
 
