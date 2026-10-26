@@ -621,6 +621,7 @@ def save_reports(folder: Path, reports: list[dict]) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--sites", default="competitor_monitor/sites.json")
+    ap.add_argument("--site", default=None, help="Check one configured name or domain instead of every store")
     ap.add_argument("--rrp", default="competitor_monitor/rrp_jrl.csv")
     ap.add_argument("--out", default="artifacts/jrl-competitors")
     ap.add_argument("--no-telegram", action="store_true")
@@ -630,8 +631,16 @@ def main() -> int:
     rrp = load_rrp(args.rrp)
     validate_rrp_reference(rrp)
     config = json.loads(Path(args.sites).read_text(encoding="utf-8"))
+    selected_sites = [site for site in config["sites"] if site.get("enabled", True)]
+    if args.site:
+        selected_sites = [site for site in selected_sites
+                          if args.site.casefold() in (
+                              site.get("name", "").casefold(),
+                              urlparse(site["url"]).netloc.casefold().removeprefix("www."))]
+        if len(selected_sites) != 1:
+            raise ValueError(f"Ожидался один сайт: {args.site}; найдено {len(selected_sites)}")
     reports = []
-    for site in config["sites"]:
+    for site in selected_sites:
         try:
             entry = {**site, "max_product_pages": args.max_products} if args.max_products is not None else site
             result = scan_site(entry, rrp, args.delay)
@@ -647,8 +656,10 @@ def main() -> int:
         print(message, "\n" + "-" * 50, flush=True)
         # Exactly one Telegram text message per configured site, including empty/error results.
         if not args.no_telegram:
-            if not send_telegram(message):
-                print("Telegram не настроен; сообщение не отправлено.", flush=True)
+            if result.get("coverage") != "DISCOVERED_CATALOG_COMPLETE":
+                print("Отчёт НЕ отправлен менеджерам: обход неполный.", flush=True)
+            elif not send_telegram(message):
+                raise RuntimeError("Telegram не настроен или отправка не удалась")
     save_reports(Path(args.out), reports)
     incomplete = [r["site"] for r in reports if not r["items"]]
     if incomplete:
