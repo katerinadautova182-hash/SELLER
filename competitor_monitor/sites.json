@@ -12,11 +12,13 @@
         "/nozhi/",
         "/combs/"
       ],
-      "max_product_pages": 65,
+      "max_product_pages": 5000,
       "legal_entity": "ИП Хайбуллин Альберт Артурович",
       "inn": "165720713414",
       "legal_source": "https://barberkit.ru/about_company/",
-      "verified": true
+      "verified": true,
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
     },
     {
       "name": "JRL Russia",
@@ -31,11 +33,13 @@
         "/nabory/",
         "/aksessuari/"
       ],
-      "max_product_pages": 65,
+      "max_product_pages": 5000,
       "legal_entity": "ООО «Фирменный Магазин»",
       "inn": "5032282269",
       "legal_source": "https://jrlrus.ru/contact-us/",
-      "verified": true
+      "verified": true,
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
     },
     {
       "name": "JRL Pro",
@@ -43,12 +47,14 @@
       "categories": [
         "/"
       ],
-      "max_product_pages": 65,
+      "max_product_pages": 5000,
       "legal_entity": "ООО «Феномен»",
       "inn": "9723246098",
       "legal_source": "https://tapki.com/ru/domain/4060112",
       "verified": false,
-      "legal_note": "Идентификация по сторонним данным; договор-оферта сайта не подтверждён"
+      "legal_note": "Идентификация по сторонним данным; договор-оферта сайта не подтверждён",
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
     },
     {
       "name": "JRL Store",
@@ -60,11 +66,13 @@
         "/accesyary",
         "/raschesky"
       ],
-      "max_product_pages": 65,
+      "max_product_pages": 5000,
       "legal_entity": "ООО «Лангбарт»",
       "inn": "7840110428",
       "legal_source": "https://jrlstore.ru/contact-us",
-      "verified": true
+      "verified": true,
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
     },
     {
       "name": "Stylist Prof",
@@ -78,7 +86,9 @@
         "/elektroinstrument/mashinki-dlya-strizhki/",
         "/"
       ],
-      "max_product_pages": 65
+      "max_product_pages": 5000,
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
     },
     {
       "name": "IPARIKMAHER",
@@ -92,7 +102,9 @@
         "/collection/jrl",
         "/"
       ],
-      "max_product_pages": 65
+      "max_product_pages": 5000,
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
     },
     {
       "name": "BarberPro",
@@ -105,7 +117,9 @@
         "/brands/jrl",
         "/catalog/tags/jrl"
       ],
-      "max_product_pages": 65
+      "max_product_pages": 5000,
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
     },
     {
       "name": "MWRussia",
@@ -122,7 +136,26 @@
         "/nabory/nabory-jrl/",
         "/britvy-sheyvery/jrl/"
       ],
-      "max_product_pages": 65
+      "max_product_pages": 5000,
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
+    },
+    {
+      "name": "Avito seller 8a43e7",
+      "url": "https://www.avito.ru/brands/8330584c5f1cf23c4471546bf45c277b/all?sellerId=8a43e74899f0c563719d9f7fc1cbed1b",
+      "platform": "avito",
+      "seller_id": "8a43e74899f0c563719d9f7fc1cbed1b",
+      "legal_entity": "Продавец на Авито — юридическое лицо не подтверждено",
+      "verified": false,
+      "legal_source": "https://www.avito.ru/brands/8330584c5f1cf23c4471546bf45c277b/all?sellerId=8a43e74899f0c563719d9f7fc1cbed1b",
+      "enabled": false,
+      "disabled_reason": "Ожидает доказанного полного и стабильного доступа к объявлениям конкретного продавца; защита от неверных алертов.",
+      "categories": [
+        "https://www.avito.ru/brands/8330584c5f1cf23c4471546bf45c277b/all?sellerId=8a43e74899f0c563719d9f7fc1cbed1b"
+      ],
+      "max_product_pages": 5000,
+      "max_catalog_pages": 1500,
+      "max_duration_seconds": 1000
     }
   ]
 }
