@@ -104,18 +104,18 @@ EQUIPMENT_CODE = re.compile(
     r"JPA[0-9A-Z]*|Q4[0-9A-Z]*|F428D?)$"
 )
 ACCESSORY_TITLE = re.compile(
-    r"(?i)лезви[ея]|ножев\\w*\\s+блок|(?:сменн\\w*\\s+)?нож\\s+для|"
-    r"подойд[её]т\\s+для|подходит\\s+для|совместим\\w*\\s+с|"
-    r"насад\\w*\\s+(?:для|на)\\s+машин|"
-    r"зарядн\\w*\\s+(?:станц|подстав|баз)|док[- ]?станц|"
-    r"щ[её]тка[- ]?см[её]тка|расч[её]ска\\s+JRL|"
-    r"\\bblade\\s+for|\\bguard\\s+for|"
-    r"(?:фильтр|батарея|аккумулятор|шнур|провод|диффузор)\\s+для"
+    r"(?i)лезви[ея]|ножев\w*\s+блок|(?:сменн\w*\s+)?нож\s+для|"
+    r"подойд[её]т\s+для|подходит\s+для|совместим\w*\s+с|"
+    r"насад\w*\s+(?:для|на)\s+машин|"
+    r"зарядн\w*\s+(?:станц|подстав|баз)|док[- ]?станц|"
+    r"щ[её]тка[- ]?см[её]тка|расч[её]ска\s+JRL|"
+    r"\bblade\s+for|\bguard\s+for|"
+    r"(?:фильтр|батарея|аккумулятор|шнур|провод|диффузор)\s+для"
 )
 DEVICE_TITLE = re.compile(
     r"(?i)машинк|триммер|фен|плойк|щипц|стайлер|"
-    r"\\b(?:clipper|trimmer|dryer|curler|curling|iron|forte\\s+pro|"
-    r"vortice|freshfade|diamante|onyx)\\b"
+    r"\b(?:clipper|trimmer|dryer|curler|curling|iron|forte\s+pro|"
+    r"vortice|freshfade|diamante|onyx)\b"
 )
 
 
@@ -129,7 +129,7 @@ def is_equipment_title(title: str) -> bool:
         return False
     # Some catalogue cards list a model instead of a generic equipment name.
     return bool(DEVICE_TITLE.search(text) or re.search(
-        r"(?i)\\b(?:JRL|FF)[ -]*(?:2020[CT]|2025[CT]|3000C|FR10[459]0|FP2401|CY2025L)", text
+        r"(?i)\b(?:JRL|FF)[ -]*(?:2020[CT]|2025[CT]|3000C|FR10[459]0|FP2401|CY2025L)", text
     ))
 
 
