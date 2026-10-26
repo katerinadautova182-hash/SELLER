@@ -35,7 +35,7 @@ BUNDLE = re.compile(r"(?i)набор|комплект|комбо|collection|ма
                     r"машинка\s+и\s+триммер|с\s+зарядной\s+базой|"
                     r"\+\s*(?:зарядная|подарок|wahl|stylecraft|шейвер|триммер)|"
                     r"\bX[12]\b")
-TITLE_SKU = re.compile(r"(?:JRL|ДИАМАНТЕ|DIAMANTE|FRESHFADE|ONYX|FORTE|2020[CТT]|3000C)", re.I)
+TITLE_SKU = re.compile(r"(?:JRL|ДИАМАНТЕ|DIAMANTE|FRESHFADE|ONYX|FORTE|ШЕЙВЕР|SHAVER|SH2301|2020[CТT]|3000C)", re.I)
 COLOR_SKUS = {
     "3000C": {"BLACK": "3000CB-F", "BLUE": "3000CD-F",
                "RED": "3000CE-F", "WHITE": "3000CW-T"},
@@ -94,17 +94,20 @@ MAIN_MACHINE_CODE = re.compile(
 )
 BUNDLE_CODES = ("GH2024", "ONYX2024", "2020C2020T")
 
-# Curated categories: clippers, trimmers, dryers, curling irons and tongs.
-# RRPs for shavers, blades, combs, brushes and accessories must be ignored.
+# Curated categories: clippers, trimmers, shavers, dryers, curling irons and tongs.
+# RRPs for replacement foils, blades, combs, brushes and accessories must be ignored.
 EQUIPMENT_CODE = re.compile(
     r"^(?:2020[CT][A-Z0-9]*|2025[CT][A-Z0-9]*|3000C[A-Z0-9]*|"
-    r"FR10(?:90|40|50)|GH2024[0-9]*|ONYX2024|"
+    r"FR10(?:90|40|50)|SH2301(?:W)?|GH2024[0-9]*|ONYX2024|"
     r"FP(?:2401|2020L)[A-Z0-9]*|JRLBA22020L|"
     r"CY2025L[A-Z]*|CYCLONE3800|PHANTOM3300A|FEATHER3660[A-Z]*|"
     r"JPA[0-9A-Z]*|Q4[0-9A-Z]*|F428D?)$"
 )
 ACCESSORY_TITLE = re.compile(
     r"(?i)лезви[ея]|ножев\w*\s+блок|(?:сменн\w*\s+)?нож\s+для|"
+    r"(?:сменн\w*\s+)?сетк\w*\s+(?:для|шейвер)|"
+    r"(?:бритвенн\w*|сменн\w*)\s+головк\w*|"
+    r"(?:нож|головк|кассет|блок|фольг)\w*\s+для\s+шейвер|"
     r"подойд[её]т\s+для|подходит\s+для|совместим\w*\s+с|"
     r"насад\w*\s+(?:для|на)\s+машин|"
     r"зарядн\w*\s+(?:станц|подстав|баз)|док[- ]?станц|"
@@ -113,9 +116,9 @@ ACCESSORY_TITLE = re.compile(
     r"(?:фильтр|батарея|аккумулятор|шнур|провод|диффузор)\s+для"
 )
 DEVICE_TITLE = re.compile(
-    r"(?i)машинк|триммер|фен|плойк|щипц|стайлер|"
+    r"(?i)машинк|триммер|шейвер|электробритв|фен|плойк|щипц|стайлер|"
     r"\b(?:clipper|trimmer|dryer|curler|curling|iron|forte\s+pro|"
-    r"vortice|freshfade|diamante|onyx)\b"
+    r"vortice|freshfade|diamante|onyx|shaver|foil\s*shaver)\b"
 )
 
 
@@ -131,7 +134,7 @@ def is_equipment_title(title: str) -> bool:
         return False
     # Some catalogue cards list a model instead of a generic equipment name.
     return bool(DEVICE_TITLE.search(text) or re.search(
-        r"(?i)(?:\bJRL\b.*\b(?:2020[CT]|2025[CT]|3000C|FR10[459]0|FP2401|CY2025L)|\bFF(?:2020[CT]|2025[CT]))", text
+        r"(?i)(?:\bJRL\b.*\b(?:2020[CT]|2025[CT]|3000C|FR10[459]0|FP2401|CY2025L|SH2301)|\bFF(?:2020[CT]|2025[CT]))", text
     ))
 
 
@@ -184,7 +187,7 @@ ACCESSORY_SLUG = re.compile(
     r"(?:nabor[-_]?dvojnyh[-_]?magnitnyh[-_]?nasadok|"
     r"zaryadn|zarjadn|zaryadk|zaryadka|podstavk|nasadok|nasadki|"
     r"nozhevoj[-_]?blok|nozhevoy[-_]?blok|blade[-_]?for|"
-    r"blade[-_]?2020|nozhi/|aksessuari/|accessories/|accessory/)",
+    r"blade[-_]?2020|setka[-_/]|shaver[-_]?foil|golovk[-_/]|nozhi/|aksessuari/|accessories/|accessory/)",
     re.I,
 )
 

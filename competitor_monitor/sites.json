@@ -6,7 +6,8 @@
       "categories": [
         "/mashinki/",
         "/trimmer/",
-        "/hair_dryers/"
+        "/hair_dryers/",
+        "/shaver/"
       ],
       "max_product_pages": 65,
       "legal_entity": "ИП Хайбуллин Альберт Артурович",
@@ -22,7 +23,8 @@
         "/trimmeri/",
         "/feni/",
         "/plojki/",
-        "/shhipci/"
+        "/shhipci/",
+        "/shejveri/"
       ],
       "max_product_pages": 65,
       "legal_entity": "ООО «Фирменный Магазин»",
@@ -108,7 +110,8 @@
       "categories": [
         "/mashinki-dlya-strizhki-volos/mashinki-jrl/",
         "/trimmery/trimmery-jrl/",
-        "/feny-1/feny-jrl/"
+        "/feny-1/feny-jrl/",
+        "/britvy-sheyvery/jrl/"
       ],
       "max_product_pages": 65
     }
