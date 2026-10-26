@@ -244,6 +244,9 @@ def current_prices(node) -> list[float]:
     for tag in list(fragment.select("s, strike, del, [style*='line-through']")):
         tag.decompose()
     for tag in list(fragment.find_all(True)):
+        # Decomposing a parent clears descendants' attrs in BeautifulSoup.
+        if tag.attrs is None:
+            continue
         attributes = " ".join(tag.get("class") or []) + " " + str(tag.get("id") or "")
         if any(marker in attributes.lower() for marker in OLD_MARKERS):
             tag.decompose()
@@ -667,10 +670,11 @@ def main() -> int:
         print(message, "\n" + "-" * 50, flush=True)
         # Exactly one Telegram text message per configured site, including empty/error results.
         if not args.no_telegram:
-            if result.get("coverage") != "DISCOVERED_CATALOG_COMPLETE":
-                print("Отчёт НЕ отправлен менеджерам: обход неполный.", flush=True)
-            elif not send_telegram(message):
+            # Send verified price observations even if coverage is incomplete,
+            # but label the report prominently as INCOMPLETE. No "all clear".
+            if not send_telegram(message):
                 raise RuntimeError("Telegram не настроен или отправка не удалась")
+            print(f"TELEGRAM_SENT {site['name']} status={result.get('coverage', 'INCOMPLETE')}", flush=True)
     save_reports(Path(args.out), reports)
     incomplete = [r["site"] for r in reports if not r["items"]]
     if incomplete:
