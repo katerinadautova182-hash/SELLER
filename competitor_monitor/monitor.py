@@ -140,9 +140,10 @@ def is_compatible(name: str, sku: str) -> bool:
     code = clean_code(sku)
     title = str(name)
     kind = product_type(code)
+    title_starts_as_device = bool(re.match(r"^\s*(?:jrl\s+)?(?:машинк|триммер|шейвер|фен|clipper|trimmer)\w*", title, re.I))
     blade_item = bool(BLADE_TITLE.search(title))
     accessory_item = bool(ACCESSORY_WORDS.search(title) or blade_item)
-    if kind in ("clipper", "trimmer", "shaver", "dryer") and accessory_item:
+    if kind in ("clipper", "trimmer", "shaver", "dryer") and accessory_item and not title_starts_as_device:
         return False
     # Clipper + trimmer kit is not a blade, spare part or a mere mention
     # of the devices it fits.
@@ -156,7 +157,7 @@ def is_compatible(name: str, sku: str) -> bool:
                                   title, re.I))
         return not bool(re.search(r"зарядн\w*|насадк\w*|ножев\w*\s+блок", title, re.I))
     if kind == "blade":
-        if not blade_item:
+        if not blade_item or title_starts_as_device:
             return False
         # The model code can coexist in a compatibility description, but BF03
         # is considered a blade ONLY if the advertised item is a blade.
@@ -621,7 +622,7 @@ def save_reports(folder: Path, reports: list[dict]) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--sites", default="competitor_monitor/sites.json")
-    ap.add_argument("--site", default=None, help="Check one configured name or domain instead of every store")
+    ap.add_argument("--site", action="append", default=[], help="Select a store domain; can repeat for multiple stores")
     ap.add_argument("--rrp", default="competitor_monitor/rrp_jrl.csv")
     ap.add_argument("--out", default="artifacts/jrl-competitors")
     ap.add_argument("--no-telegram", action="store_true")
@@ -633,12 +634,12 @@ def main() -> int:
     config = json.loads(Path(args.sites).read_text(encoding="utf-8"))
     selected_sites = [site for site in config["sites"] if site.get("enabled", True)]
     if args.site:
+        domains = {x.casefold().removeprefix("www.") for x in args.site}
         selected_sites = [site for site in selected_sites
-                          if args.site.casefold() in (
-                              site.get("name", "").casefold(),
-                              urlparse(site["url"]).netloc.casefold().removeprefix("www."))]
-        if len(selected_sites) != 1:
-            raise ValueError(f"Ожидался один сайт: {args.site}; найдено {len(selected_sites)}")
+                          if (site.get("name", "").casefold() in domains
+                              or urlparse(site["url"]).netloc.casefold().removeprefix("www.") in domains)]
+        if len(selected_sites) != len(domains):
+            raise ValueError(f"Не все сайты найдены: {args.site}; найдено {len(selected_sites)}")
     reports = []
     for site in selected_sites:
         try:
