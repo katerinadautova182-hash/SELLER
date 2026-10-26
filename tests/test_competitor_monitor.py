@@ -174,3 +174,72 @@ def test_forwardable_telegram_report_never_cuts_mid_product():
     assert len(msg) <= 3850
     assert "Остальные позиции:" in msg
     assert msg.count("Цена на сайте:") == msg.count("\nРРЦ: ")
+
+
+def test_only_main_equipment_skus_are_monitored():
+    from competitor_monitor.monitor import is_equipment_code, match_sku
+    assert is_equipment_code("FP2401-W")
+    assert is_equipment_code("2020T-B")
+    assert is_equipment_code("JPA066-32MM")
+    for sku in ("SH2301", "BF 03", "SF11", "BR1-32MM", "J302-RED", "jRL-C2"):
+        assert not is_equipment_code(sku)
+    actual = load_rrp()
+    assert match_sku("Ножевой блок JRL BF 03 для машинки 2020C", actual) is None
+    assert match_sku("Лезвие Fade Precision FF2020C", actual) is None
+    assert match_sku("ПОДОЙДЕТ ДЛЯ МОДЕЛЕЙ: JRL FF 2020C", actual) is None
+    assert match_sku("Шейвер JRL SH2301", actual) is None
+    assert match_sku("Машинка JRL FreshFade 2020C", actual)["sku"] == "2020C"
+    assert match_sku("Фен JRL Vortice белый", actual)["sku"] == "CY2025LW"
+    assert match_sku("Фен JRL Vortice желтый", actual) is None
+
+
+def test_barberkit_forte_pro_with_bundled_brushes_maps_to_approved_rrp():
+    from competitor_monitor.monitor import candidate
+    rrps = load_rrp()
+    samples = [
+        ("jRL FORTE PRO Professional + термобрашинг + расческа", "FP2401B"),
+        ("jRL FORTE PRO Professional белый + термобрашинг + расческа", "FP2401-W"),
+        ("jRL FORTE PRO Professional синий + 2 термобрашинга", "FP2401HD"),
+    ]
+    for name, sku in samples:
+        node = BeautifulSoup(
+            f'<div class="product-card"><h3>{name}</h3><span>14 990 ₽</span></div>',
+            "html.parser",
+        ).div
+        row = candidate(node, "https://barberkit.ru/hair_dryers/", rrps, "card")
+        assert row is not None
+        assert row["status"] == "MATCHED"
+        assert row["sku"] == sku
+        assert row["price"] == 14990
+        assert row["rrp"] == 19800
+
+
+def test_barberkit_category_cards_do_not_require_accessory_only_urls():
+    from competitor_monitor.monitor import extract
+    actual = load_rrp()
+    html = """
+    <section>
+      <article class="product-card"><h3>jRL FORTE PRO Professional белый + термобрашинг + расческа</h3>
+        <a href="/jrl_forte_white/">ПОДРОБНЕЕ</a><span>14 990 ₽</span></article>
+      <article class="product-card"><h3>Лезвие Fade Precision FF2020C</h3>
+        <a href="/fade_2020c">ПОДРОБНЕЕ</a><span>3 470 ₽</span></article>
+      <article class="product-card"><h3>JRL Vortice черный</h3>
+        <a href="/vortice_black">ПОДРОБНЕЕ</a><span>12 990 ₽</span><del>13 400 ₽</del></article>
+    </section>
+    """
+    rows, urls = extract(BeautifulSoup(html, "html.parser"), "https://barberkit.ru/hair_dryers/", actual)
+    matched = {(r["sku"], r["price"]) for r in rows if r["status"] == "MATCHED"}
+    assert ("FP2401-W", 14990.0) in matched
+    assert ("CY2025LB", 12990.0) in matched
+    assert not any(r["sku"] == "2020C" for r in rows)
+    assert "https://barberkit.ru/jrl_forte_white" in urls
+    assert "https://barberkit.ru/fade_2020c" not in urls
+
+
+def test_report_not_marked_incomplete_due_to_included_accessories():
+    report = {"site": "BarberKit", "url": "https://barberkit.ru/",
+              "legal_entity": "ИП Хайбуллин Альберт Артурович", "items": [],
+              "errors": ["Some blocked request"]}
+    text = format_report(report)
+    assert "НЕ завершена" not in text
+    assert "не подтверждён" in text
