@@ -39,6 +39,31 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m competitor_monitor.monitor --site "${{ matrix.site }}" --delay 0.12 --out "artifacts/${{ matrix.slug }}"
+      - name: Send full prices TXT to Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TARGET_SLUG: ${{ matrix.slug }}
+          TARGET_SITE: ${{ matrix.site }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from ozon_agent.telegram import send_telegram_document
+          slug = os.environ["TARGET_SLUG"]
+          site = os.environ["TARGET_SITE"]
+          path = Path(f"artifacts/{slug}/{slug}.txt")
+          if path.is_file() and path.stat().st_size:
+              assert send_telegram_document(
+                  path, caption=f"{site} — полный отчёт: все найденные цены JRL, РРЦ и разница. "
+                  "Покрытие может быть неполным — см. статус в отчёте."
+              )
+              print(f"TELEGRAM_FULL_DOCUMENT_SENT {site}", flush=True)
+          else:
+              print(f"Telegram full report unavailable for {site}: no TXT artifact.")
+              raise SystemExit(1)
+          PY
       - name: Full audit artifacts
         if: always()
         uses: actions/upload-artifact@v4
