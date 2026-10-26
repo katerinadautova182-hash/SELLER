@@ -202,8 +202,8 @@ def test_pagination_walks_numbered_pages_and_next():
       '<a href="/mashinki/?page=3" rel="next">Следующая</a>'
       '</nav><a href="/unrelated/">3</a>', "html.parser")
     links = pagination_links(soup, base, "https://barberkit.ru/")
-    assert "https://barberkit.ru/mashinki/?page=2" in links
-    assert "https://barberkit.ru/mashinki/?page=3" in links
+    assert "https://barberkit.ru/mashinki?page=2" in links
+    assert "https://barberkit.ru/mashinki?page=3" in links
     assert all("/unrelated/" not in x for x in links)
 
 
