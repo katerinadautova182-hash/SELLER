@@ -181,13 +181,14 @@ def test_only_main_equipment_skus_are_monitored():
     assert is_equipment_code("FP2401-W")
     assert is_equipment_code("2020T-B")
     assert is_equipment_code("JPA066-32MM")
-    for sku in ("SH2301", "BF 03", "SF11", "BR1-32MM", "J302-RED", "jRL-C2"):
+    for sku in ("BF 03", "SF11", "BR1-32MM", "J302-RED", "jRL-C2"):
         assert not is_equipment_code(sku)
     actual = load_rrp()
     assert match_sku("Ножевой блок JRL BF 03 для машинки 2020C", actual) is None
     assert match_sku("Лезвие Fade Precision FF2020C", actual) is None
     assert match_sku("ПОДОЙДЕТ ДЛЯ МОДЕЛЕЙ: JRL FF 2020C", actual) is None
-    assert match_sku("Шейвер JRL SH2301", actual) is None
+    assert match_sku("Шейвер JRL SH2301", actual)["sku"] == "SH2301"
+    assert match_sku("Шейвер JRL SH2301-W", actual)["sku"] == "SH2301-W"
     assert match_sku("Машинка JRL FreshFade 2020C", actual)["sku"] == "2020C"
     assert match_sku("Фен JRL Vortice белый", actual)["sku"] == "CY2025LW"
     assert match_sku("Фен JRL Vortice желтый", actual) is None
@@ -252,3 +253,57 @@ def test_sku_label_is_not_a_product_offer():
         BeautifulSoup("<div><span>АРТИКУЛ: FF2020T</span><span>990 ₽</span></div>", "html.parser").div,
         "https://barberkit.ru/2020t", data, "detail"
     ) is None
+
+def test_shavers_are_included_but_replacement_parts_are_not():
+    from competitor_monitor.monitor import (
+        candidate, extract, is_equipment_code, is_equipment_title, match_sku
+    )
+    actual = load_rrp()
+    assert is_equipment_code("SH2301")
+    assert is_equipment_code("SH2301-W")
+    assert is_equipment_title("Профессиональный шейвер JRL Onyx SH2301")
+    assert is_equipment_title("Электробритва JRL Shaver Onyx SH2301-W")
+    assert match_sku("JRL ONYX Shaver SH2301W", actual)["sku"] == "SH2301-W"
+    for title in (
+        "Сменная сетка для шейвера JRL SH2301",
+        "Ножевой блок для шейвера JRL SH2301",
+        "Бритвенная головка JRL SH2301-W",
+        "Кассета для шейвера JRL SH2301",
+    ):
+        assert match_sku(title, actual) is None
+    cases = [
+        ("Шейвер JRL ONYX SH2301", "SH2301"),
+        ("Шейвер JRL ONYX SH2301-W", "SH2301-W"),
+    ]
+    for title, sku in cases:
+        node = BeautifulSoup(
+            f'<div class="product-card"><a href="/shaver/{sku}">{title}</a>'
+            '<span>8 290 ₽</span></div>', "html.parser"
+        ).div
+        result = candidate(node, "https://jrlstore.ru/trimery", actual, "card")
+        assert result["sku"] == sku
+        assert result["rrp"] == 9043
+        assert result["price"] == 8290
+        assert result["status"] == "MATCHED"
+    listing = BeautifulSoup(
+        '<div class="product-card"><a href="/shaver/sh2301">Шейвер JRL SH2301</a>'
+        '<span>8 290 ₽</span></div>'
+        '<div class="product-card"><a href="/shaver/grid">Сменная сетка для шейвера JRL SH2301</a>'
+        '<span>1 490 ₽</span></div>', "html.parser"
+    )
+    rows, urls = extract(listing, "https://jrlstore.ru/trimery", actual)
+    assert any(r.get("sku") == "SH2301" and r.get("status") == "MATCHED" for r in rows)
+    assert not any(r.get("name", "").startswith("Сменная сетка") for r in rows)
+    assert "https://jrlstore.ru/shaver/sh2301" in urls
+    assert "https://jrlstore.ru/shaver/grid" not in urls
+
+
+def test_shaver_categories_are_scanned_with_other_tools():
+    import json
+    sites = json.loads(Path("competitor_monitor/sites.json").read_text(encoding="utf-8"))["sites"]
+    by_domain = {s["url"].replace("https://", "").strip("/"): s for s in sites}
+    assert "/shaver/" in by_domain["barberkit.ru"]["categories"]
+    assert "/shejveri/" in by_domain["jrlrus.ru"]["categories"]
+    assert "/britvy-sheyvery/jrl/" in by_domain["mwrussia.ru"]["categories"]
+    # At JRL Store the shavers are already in the "Триммеры" section.
+    assert "/trimery" in by_domain["jrlstore.ru"]["categories"]
