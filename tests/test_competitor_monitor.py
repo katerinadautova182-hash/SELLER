@@ -63,7 +63,7 @@ def test_variant_ambiguous():
 def test_blocked_site_no_false_all_clear():
     x={"site":"Example","url":"https://example.ru/","items":[],"violations":[],
        "unresolved":[],"pages_ok":0,"pages_attempted":2,"errors":["403"]}
-    assert "НЕ завершена" in format_report(x)
+    assert "не подтверждён" in format_report(x)
 
 
 def test_accessory_code_reference_cannot_become_main_equipment():
