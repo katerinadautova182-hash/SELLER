@@ -1,0 +1,39 @@
+name: JRL BarberKit full rerun
+on:
+  push:
+    branches:
+      - feature/jrl-exhaustive-crawl-and-strict-types-20261026
+    paths:
+      - ".github/workflows/jrl-barberkit-full-rerun.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: jrl-barberkit-rerun
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencies
+        run: python -m pip install requests beautifulsoup4 pytest
+      - name: Product-type and pagination regression tests
+        run: python -m pytest -q tests/test_competitor_monitor.py
+      - name: Audit ALL discoverable BarberKit JRL listings
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m competitor_monitor.monitor --site barberkit.ru --delay 0.15
+      - name: Save full crawl
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: barberkit-full-catalog-price-audit
+          path: artifacts/jrl-competitors/
+          retention-days: 30
+          if-no-files-found: ignore
