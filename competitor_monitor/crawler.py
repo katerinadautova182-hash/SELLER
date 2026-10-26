@@ -168,6 +168,7 @@ def crawl(site: dict, rrp: dict, delay: float = 0.25) -> dict:
     products: set[str] = set()
     visited_catalog: set[str] = set()
     visited_products: set[str] = set()
+    unavailable_detail_urls: set[str] = set()
     catalog_seen: set[str] = set()
     truncated = False
     pages_ok = 0
@@ -256,6 +257,10 @@ def crawl(site: dict, rrp: dict, delay: float = 0.25) -> dict:
             found, _ = extract(soup, url, rrp)
             records.extend(found)
         except (requests.RequestException, ValueError) as ex:
+            if (isinstance(ex, requests.HTTPError)
+                    and ex.response is not None
+                    and ex.response.status_code in (404, 410)):
+                unavailable_detail_urls.add(canon(url))
             errors.append(f"{url}: {str(ex)[:180]}")
         if delay:
             sleep(delay)
@@ -263,6 +268,11 @@ def crawl(site: dict, rrp: dict, delay: float = 0.25) -> dict:
     matched: defaultdict[str, list[dict]] = defaultdict(list)
     unresolved = []
     for record in records:
+        # A stale category card may still advertise an old price for a 404/410
+        # detail URL. Such a price is not a verified currently purchasable offer.
+        if canon(str(record.get("url") or "")) in unavailable_detail_urls:
+            unresolved.append({**record, "price": None, "status": "INACCESSIBLE_PRODUCT"})
+            continue
         if record["status"] == "MATCHED" and record["price"] is not None:
             matched[record["sku"]].append(record)
         elif record["status"] != "MATCHED":
