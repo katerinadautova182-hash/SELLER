@@ -125,7 +125,7 @@ def is_equipment_code(sku: str) -> bool:
 
 def is_equipment_title(title: str) -> bool:
     text = clean_title(title)
-    if re.match(r"(?i)^\\s*(?:АРТИКУЛ|SKU|МОДЕЛЬ)\\s*:", text):
+    if re.match(r"(?i)^\s*(?:АРТИКУЛ|SKU|МОДЕЛЬ)\s*:", text):
         return False
     if ACCESSORY_TITLE.search(text) or ACCESSORY_WORDS.search(text):
         return False
