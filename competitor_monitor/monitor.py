@@ -95,19 +95,77 @@ MAIN_MACHINE_CODE = re.compile(
 BUNDLE_CODES = ("GH2024", "ONYX2024", "2020C2020T")
 
 
+BLADE_SKU = re.compile(r"^(?:BF0?[1-9]|SF\d{2}|SB\d{2})(?:[A-Z0-9]*)$")
+BLADE_TITLE = re.compile(
+    r"(?:ножев\w*\s+блок|сменн\w*\s+нож|(?:нож|лезвие|лезви\w*)\s+для|"
+    r"лезви\w*\s+(?:jrl|для)|\b(?:blade|cutting\s+blade|fade\s+blade|"
+    r"taper\s+blade|standard\s+blade|replacement\s+blade)\b|"
+    r"нож\s+(?:bf\d{2}|sf\d{2}))", re.I
+)
+DEVICE_TITLE = re.compile(r"\b(?:машинка|clipper|триммер|trimmer|"
+                          r"шейвер|shaver|электробритва)\b", re.I)
+COMB_TITLE = re.compile(r"(?:расч[её]ск|насад\w*|гребень|comb|guard)", re.I)
+
+
+def product_type(sku: str) -> str:
+    """RRP SKU *role*; never treat a compatible accessory as the device itself."""
+    code = clean_code(sku)
+    if BLADE_SKU.match(code):
+        return "blade"
+    if code.startswith(("2020C", "2025C", "3000C", "FR1040", "FR1050", "FR1090")):
+        if code == "2020C2020T":
+            return "kit"
+        return "clipper"
+    if code.startswith(("2020T", "2025T")):
+        return "trimmer"
+    if code.startswith(("GH2024", "ONYX2024")):
+        return "kit"
+    if code.startswith("SH2301"):
+        return "shaver"
+    if code.startswith(("CY2025", "CYCLONE", "FP2401", "FEATHER", "PHANTOM")):
+        return "dryer"
+    if code.startswith(("GUARD", "JNC", "JCA")):
+        return "comb"
+    if code in ("JRLC1", "JRLC2"):
+        return "charger"
+    return "other"
+
+
 def is_compatible(name: str, sku: str) -> bool:
-    """Reject obvious wrong product families, not just matching model references."""
-    identifier = clean_code(sku)
+    """Enforce commodity type as well as SKU, rejecting cross-category references.
+
+    'Нож для машинки JRL 2020C' must not be reported as machine 2020C;
+    'Машинка JRL ... с ножом BF03' must not become the replacement blade BF03.
+    """
+    code = clean_code(sku)
     title = str(name)
-    if MAIN_MACHINE_CODE.match(identifier) and ACCESSORY_WORDS.search(title):
+    kind = product_type(code)
+    blade_item = bool(BLADE_TITLE.search(title))
+    accessory_item = bool(ACCESSORY_WORDS.search(title) or blade_item)
+    if kind in ("clipper", "trimmer", "shaver", "dryer") and accessory_item:
         return False
-    # A 2020C/2020T bundle must be a set of devices, never accessories "for" both.
-    if identifier == "2020C2020T":
-        return bool(re.search(r"(?:машинк\w*\s*(?:\+|и|и\s*триммер|с)\s*триммер|"
-                              r"комплект\w*\s+(?:машинк|триммер)|набор\w*\s+(?:машинк|триммер))",
-                              title, re.I))
-    if identifier.startswith("GH2024"):
+    # Clipper + trimmer kit is not a blade, spare part or a mere mention
+    # of the devices it fits.
+    if kind == "kit":
+        if accessory_item:
+            return False
+        if code == "2020C2020T":
+            return bool(re.search(r"(?:машинк\w*\s*(?:\+|и|и\s*триммер|с)\s*триммер|"
+                                  r"комплект\w*\s+(?:машинк|триммер)|"
+                                  r"набор\w*\s+(?:машинк|триммер))",
+                                  title, re.I))
         return not bool(re.search(r"зарядн\w*|насадк\w*|ножев\w*\s+блок", title, re.I))
+    if kind == "blade":
+        if not blade_item:
+            return False
+        # The model code can coexist in a compatibility description, but BF03
+        # is considered a blade ONLY if the advertised item is a blade.
+        return True
+    if kind == "comb" and not COMB_TITLE.search(title):
+        return False
+    if kind in ("clipper", "trimmer", "shaver", "dryer"):
+        if kind == "dryer" and re.search(r"ножев\w*\s+блок|для\s+фен", title, re.I):
+            return False
     return True
 
 
@@ -444,63 +502,9 @@ def session_with_retries() -> requests.Session:
     return session
 
 
-def scan_site(site: dict, rrp: dict, delay: float = 0.8) -> dict:
-    base = site["url"]
-    categories = [internal_url(base, path) for path in site["categories"]]
-    categories = [u for u in dict.fromkeys(categories) if u]
-    session = session_with_retries()
-    records, errors, follow_urls, pages_ok = [], [], [], 0
-    visited = set()
-    for url in categories:
-        try:
-            soup = fetch_html(session, url)
-            pages_ok += 1
-            found, links = extract(soup, url, rrp)
-            records.extend(found)
-            follow_urls.extend(links)
-        except (requests.RequestException, ValueError) as ex:
-            errors.append(f"{url}: {str(ex)[:150]}")
-        visited.add(url)
-        time.sleep(delay)
-    follow_urls = list(dict.fromkeys(u for u in follow_urls if u not in visited))
-    for url in follow_urls[:int(site.get("max_product_pages", 60))]:
-        try:
-            soup = fetch_html(session, url)
-            pages_ok += 1
-            found, _ = extract(soup, url, rrp)
-            records.extend(found)
-        except (requests.RequestException, ValueError) as ex:
-            errors.append(f"{url}: {str(ex)[:150]}")
-        visited.add(url)
-        time.sleep(delay)
-
-    # One entry per SKU with the lowest reliably visible current price.
-    # Keep different advertised prices (catalogue/detail) in the audit.
-    matched = defaultdict(list)
-    unresolved = []
-    for record in records:
-        if record["status"] == "MATCHED" and record["price"] is not None:
-            matched[record["sku"]].append(record)
-        elif record["status"] != "MATCHED":
-            unresolved.append(record)
-    rows = []
-    for sku, options in matched.items():
-        options.sort(key=lambda x: (x["price"], x["url"]))
-        item = dict(options[0])
-        prices = sorted(set(o["price"] for o in options))
-        item["all_observed_prices"] = prices
-        item["price_conflict"] = len(prices) > 1
-        item["delta"] = round(item["price"] - item["rrp"], 2)
-        item["difference_pct"] = round((item["price"] / item["rrp"] - 1) * 100, 1)
-        rows.append(item)
-    rows.sort(key=lambda x: (x["delta"], x["sku"]))
-    return {"site": site["name"], "url": base,
-            "legal_entity": site.get("legal_entity"), "inn": site.get("inn"),
-            "verified": site.get("verified", False),
-            "checked_at": datetime.now(timezone.utc).isoformat(),
-            "pages_ok": pages_ok, "pages_attempted": len(visited), "errors": errors,
-            "items": rows, "unresolved": unresolved,
-            "violations": [r for r in rows if r["delta"] < -0.005]}
+def scan_site(site: dict, rrp: dict, delay: float = 0.25) -> dict:
+    from .crawler import crawl
+    return crawl(site, rrp, delay)
 
 
 def fmt(amount: float) -> str:
@@ -551,16 +555,20 @@ def format_report(report: dict, *, max_chars: int | None = 3850,
     owner = str(report.get("legal_entity") or "Юридическое лицо не установлено")
     if not report.get("verified", True):
         owner += " (реквизиты требуют подтверждения)"
+    coverage = report.get("coverage", "INCOMPLETE")
+    complete = coverage == "DISCOVERED_CATALOG_COMPLETE"
     lines = [f"{domain} — {owner}",
-             f"Контроль РРЦ JRL | проверено товаров: {len(items)}",
-             f"Ниже РРЦ: {len(below)}"]
+             f"Контроль РРЦ JRL | статус: {'ОБОЙДЕН ВЕСЬ ДОСТУПНЫЙ КАТАЛОГ' if complete else 'ПРОВЕРКА НЕПОЛНА'}",
+             f"Сопоставлено товаров: {len(items)} | Ниже РРЦ: {len(below)}",
+             f"Проверено страниц: {report.get('pages_ok', 0)}/{report.get('pages_attempted', 0)}"]
     if not items:
         lines += ["", "ВНИМАНИЕ: проверка НЕ завершена. Нет подтверждённых цен. Вывод о соблюдении РРЦ невозможен."]
         return "\n".join(lines)
     if not below:
-        lines += ["", "Цен ниже РРЦ среди проверенных товаров не обнаружено."]
-    if report.get("errors"):
-        lines += ["", "Часть страниц сайта была недоступна — проверка неполная."]
+        lines += ["", "По найденным товарам цен ниже РРЦ не выявлено." if complete
+                  else "Проверка не завершена — отсутствие нарушений не подтверждено."]
+    if not complete:
+        lines += ["", "Данные предварительные: не все объявления/страницы/цены подтверждены."]
 
     sections = [("ТОВАРЫ НИЖЕ РРЦ", below)]
     if not only_violations:
@@ -628,7 +636,8 @@ def main() -> int:
             entry = {**site, "max_product_pages": args.max_products} if args.max_products is not None else site
             result = scan_site(entry, rrp, args.delay)
         except Exception as exc:
-            result = {"site": site.get("name", site["url"]), "url": site["url"],
+            result = {"coverage": "INCOMPLETE", "is_complete": False,
+                      "site": site.get("name", site["url"]), "url": site["url"],
                       "legal_entity": site.get("legal_entity"), "inn": site.get("inn"),
                       "verified": site.get("verified", False),
                       "items": [], "violations": [], "unresolved": [],
@@ -644,7 +653,7 @@ def main() -> int:
     incomplete = [r["site"] for r in reports if not r["items"]]
     if incomplete:
         print("Не удалось подтвердить цены в: " + ", ".join(incomplete), flush=True)
-    return 1 if not any(r["items"] for r in reports) else 0
+    return 1 if any(r.get("coverage") != "DISCOVERED_CATALOG_COMPLETE" for r in reports) else 0
 
 
 if __name__ == "__main__":
