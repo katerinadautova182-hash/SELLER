@@ -18,7 +18,7 @@
       "legal_source": "https://barberkit.ru/about_company/",
       "verified": true,
       "max_catalog_pages": 1500,
-      "max_duration_seconds": 1000
+      "max_duration_seconds": 390
     },
     {
       "name": "JRL Russia",
@@ -156,6 +156,25 @@
       "max_product_pages": 5000,
       "max_catalog_pages": 1500,
       "max_duration_seconds": 1000
+    },
+    {
+      "name": "Shevelura23",
+      "url": "https://shevelura23.ru/",
+      "platform": "tilda",
+      "legal_entity": "ИП Зотова Эрика Олеговна",
+      "inn": "290221495001",
+      "verified": true,
+      "legal_source": "https://shevelura23.ru/info",
+      "categories": [
+        "/mashinki-dlya-strizhki",
+        "/"
+      ],
+      "enabled": true,
+      "max_product_pages": 2500,
+      "max_catalog_pages": 350,
+      "max_duration_seconds": 390,
+      "dynamic_catalog_unverified": true,
+      "coverage_note": "Сайт использует Tilda Load more: пока не доказана выгрузка всех товаров, отчёт отмечается как неполный"
     }
   ]
 }
