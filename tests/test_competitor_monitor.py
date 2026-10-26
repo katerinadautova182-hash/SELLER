@@ -127,9 +127,13 @@ def test_report_starts_with_site_and_legal_entity():
 def test_site_count_and_legal_data_saved():
     import json
     sites = json.loads(Path("competitor_monitor/sites.json").read_text(encoding="utf-8"))["sites"]
-    assert len(sites) == 8
-    assert len({site["url"] for site in sites}) == 8
-    assert all(site.get("legal_entity") and site.get("inn") for site in sites)
+    active = [x for x in sites if x.get("enabled", True)]
+    assert len(sites) == 10
+    assert len(active) == 9
+    assert len({x["url"] for x in sites}) == len(sites)
+    assert all(x.get("legal_entity") and x.get("inn") for x in active)
+    assert any("shevelura23.ru" in x["url"] for x in active)
+    assert any(x.get("platform") == "avito" and x["enabled"] is False for x in sites)
 
 
 def test_forwardable_report_lists_product_price_and_rrp():
@@ -174,3 +178,50 @@ def test_forwardable_telegram_report_never_cuts_mid_product():
     assert len(msg) <= 3850
     assert "Остальные позиции:" in msg
     assert msg.count("Цена на сайте:") == msg.count("\nРРЦ: ")
+
+
+def test_blades_are_not_clippers_even_with_compatibility_model_code():
+    from competitor_monitor.monitor import is_compatible, match_sku
+    assert not is_compatible("Ножевой блок Fade Blade для машинки JRL FF2020C", "2020C")
+    assert not is_compatible("Зарядная база JRL для 2020C-B", "2020C-B")
+    assert not is_compatible("Машинка JRL 2020C с ножом BF03", "BF03")
+    assert is_compatible("Ножевой блок JRL Standard BF03", "BF03")
+    assert is_compatible("Машинка JRL Fresh Fade FF2020C", "2020C")
+    assert is_compatible("Триммер JRL 2020T-B", "2020T-B")
+    blade_rrp = {clean_code("BF03"): {"sku": "BF03", "rrp": 3051}}
+    assert match_sku("Машинка JRL 2020C с ножом BF03", blade_rrp) is None
+    assert match_sku("Ножевой блок JRL BF03", blade_rrp)["sku"] == "BF03"
+
+
+def test_pagination_walks_numbered_pages_and_next():
+    from competitor_monitor.crawler import pagination_links
+    base = "https://barberkit.ru/mashinki/"
+    soup = BeautifulSoup(
+      '<nav class="pagination">'
+      '<a href="/mashinki/?page=2">2</a>'
+      '<a href="/mashinki/?page=3" rel="next">Следующая</a>'
+      '</nav><a href="/unrelated/">3</a>', "html.parser")
+    links = pagination_links(soup, base, "https://barberkit.ru/")
+    assert "https://barberkit.ru/mashinki/?page=2" in links
+    assert "https://barberkit.ru/mashinki/?page=3" in links
+    assert all("/unrelated/" not in x for x in links)
+
+
+def test_unknown_coverage_is_not_called_complete():
+    report = {"site": "Sample", "url": "https://example.ru/",
+              "legal_entity": "ООО «Пример»", "verified": True,
+              "coverage": "INCOMPLETE", "pages_ok": 4, "pages_attempted": 5,
+              "items": [{"sku": "2020C", "name": "Машинка JRL 2020C",
+                         "rrp": 14070, "price": 14070, "url": "https://example.ru/item"}],
+              "unresolved": [], "errors": []}
+    body = format_report(report)
+    assert "ПРОВЕРКА НЕПОЛНА" in body
+    assert "отсутствие нарушений не подтверждено" in body
+
+
+def test_shevelura_url_and_legal_info():
+    import json
+    cfg = json.loads(Path("competitor_monitor/sites.json").read_text("utf-8"))
+    shops = {x["name"]: x for x in cfg["sites"]}
+    assert shops["Shevelura23"]["inn"] == "290221495001"
+    assert shops["Shevelura23"]["legal_entity"] == "ИП Зотова Эрика Олеговна"
