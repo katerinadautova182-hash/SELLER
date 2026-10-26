@@ -129,7 +129,7 @@ def is_equipment_title(title: str) -> bool:
         return False
     # Some catalogue cards list a model instead of a generic equipment name.
     return bool(DEVICE_TITLE.search(text) or re.search(
-        r"(?i)\b(?:JRL|FF)\b.*\b(?:2020[CT]|2025[CT]|3000C|FR10[459]0|FP2401|CY2025L)", text
+        r"(?i)(?:\bJRL\b.*\b(?:2020[CT]|2025[CT]|3000C|FR10[459]0|FP2401|CY2025L)|\bFF(?:2020[CT]|2025[CT]))", text
     ))
 
 
