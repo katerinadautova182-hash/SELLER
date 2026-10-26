@@ -6,11 +6,7 @@
       "categories": [
         "/mashinki/",
         "/trimmer/",
-        "/shaver/",
-        "/hair_dryers/",
-        "/combos/",
-        "/nozhi/",
-        "/combs/"
+        "/hair_dryers/"
       ],
       "max_product_pages": 65,
       "legal_entity": "ИП Хайбуллин Альберт Артурович",
@@ -24,12 +20,9 @@
       "categories": [
         "/mashinki/",
         "/trimmeri/",
-        "/shejveri/",
         "/feni/",
         "/plojki/",
-        "/shhipci/",
-        "/nabory/",
-        "/aksessuari/"
+        "/shhipci/"
       ],
       "max_product_pages": 65,
       "legal_entity": "ООО «Фирменный Магазин»",
@@ -56,9 +49,7 @@
       "categories": [
         "/mashinki",
         "/trimery",
-        "/feny",
-        "/accesyary",
-        "/raschesky"
+        "/feny"
       ],
       "max_product_pages": 65,
       "legal_entity": "ООО «Лангбарт»",
@@ -115,12 +106,9 @@
       "legal_source": "https://mwrussia.ru/contacts/",
       "verified": true,
       "categories": [
-        "/jrl",
         "/mashinki-dlya-strizhki-volos/mashinki-jrl/",
         "/trimmery/trimmery-jrl/",
-        "/feny-1/feny-jrl/",
-        "/nabory/nabory-jrl/",
-        "/britvy-sheyvery/jrl/"
+        "/feny-1/feny-jrl/"
       ],
       "max_product_pages": 65
     }
