@@ -284,6 +284,9 @@ def crawl(site: dict, rrp: dict, delay: float = 0.25) -> dict:
             "Не все страницы обойдены (лимит времени/количества): "
             f"оставшиеся разделы={len(catalog_q)}, товарные URL={len(product_q)}"
         )
+    if site.get("dynamic_catalog_unverified"):
+        errors.append("Магазин загружает часть ассортимента динамически: " 
+                      "полнота каталога JRL не доказана.")
     if is_avito:
         # Seller-only completeness is not demonstrable from public Avito HTML.
         # Even a nonempty response is NOT a complete scrape of seller inventory.
