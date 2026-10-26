@@ -651,6 +651,8 @@ def main() -> int:
             result = scan_site(entry, rrp, args.delay)
         except Exception as exc:
             print(f"ОШИБКА СКАНЕРА {site['name']}: {type(exc).__name__}: {exc}", flush=True)
+            import traceback
+            traceback.print_exc()
             result = {"coverage": "INCOMPLETE", "is_complete": False,
                       "site": site.get("name", site["url"]), "url": site["url"],
                       "legal_entity": site.get("legal_entity"), "inn": site.get("inn"),
