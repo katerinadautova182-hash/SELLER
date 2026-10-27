@@ -187,7 +187,8 @@ ACCESSORY_SLUG = re.compile(
     r"(?:nabor[-_]?dvojnyh[-_]?magnitnyh[-_]?nasadok|"
     r"zaryadn|zarjadn|zaryadk|zaryadka|podstavk|nasadok|nasadki|"
     r"nozhevoj[-_]?blok|nozhevoy[-_]?blok|blade[-_]?for|"
-    r"blade[-_]?2020|nozh[-_]dlya[-_]|nozh[-_]trimmera|nozh[-_]mashinki|"\n    r"setka[-_/]|shaver[-_]?foil|golovk[-_/]|nozhi/|aksessuari/|accessories/|accessory/)",
+    r"blade[-_]?2020|nozh[-_]dlya[-_]|nozh[-_]trimmera|nozh[-_]mashinki|"
+    r"setka[-_/]|shaver[-_]?foil|golovk[-_/]|nozhi/|aksessuari/|accessories/|accessory/)",
     re.I,
 )
 
