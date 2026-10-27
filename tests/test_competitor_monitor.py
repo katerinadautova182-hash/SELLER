@@ -307,3 +307,20 @@ def test_shaver_categories_are_scanned_with_other_tools():
     assert "/britvy-sheyvery/jrl/" in by_domain["mwrussia.ru"]["categories"]
     # At JRL Store the shavers are already in the "Триммеры" section.
     assert "/trimery" in by_domain["jrlstore.ru"]["categories"]
+
+
+def test_jrl_pro_onyx_trimmer_blade_is_not_reported_as_trimmer():
+    from competitor_monitor.monitor import url_compatible, extract, load_rrp
+    blade_url = "https://jrl-pro.ru/product/nozh-dlya-trimmera-jrl-onyx.html"
+    assert not url_compatible(blade_url, "2020T")
+    assert not url_compatible(blade_url, "2020T-B")
+    html = BeautifulSoup(
+        '<h1>JRL ONYX EZ-GAP 2020T</h1>'
+        '<div class="product-card">'
+        '<a href="/product/nozh-dlya-trimmera-jrl-onyx.html">'
+        'JRL ONYX EZ-GAP 2020T</a>'
+        '<span>2 890 ₽</span></div>', "html.parser"
+    )
+    rows, _ = extract(html, blade_url, load_rrp())
+    assert not any(r.get("status") == "MATCHED" and r.get("sku") == "2020T" for r in rows)
+    assert url_compatible("https://jrl-pro.ru/product/trimmer-jrl-freshfade-2020t-b.html", "2020T-B")
