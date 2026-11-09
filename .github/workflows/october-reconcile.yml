@@ -1,0 +1,32 @@
+name: October 2026 reconcile Yandex and Ozon
+on:
+  push:
+    paths:
+      - "reporting/october_2026_reconcile.py"
+      - ".github/workflows/october-reconcile.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Fetch historical orders and product mapping
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+          YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
+        run: python reporting/october_2026_reconcile.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: october-2026-reconcile
+          path: artifacts/october_2026_reconcile/
+          retention-days: 30
+          if-no-files-found: warn
