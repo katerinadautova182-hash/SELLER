@@ -51,7 +51,7 @@ def wb():
  grouped=collections.defaultdict(lambda:[0,0,0])
  kinds=collections.Counter()
  for x in allrows:
-  op=x.get("supplierOperName","")
+  op=x.get("sellerOperName","")
   kinds[op]+=1
   sku=str(x.get("vendorCode") or x.get("nmId") or "")
   if not sku:continue
