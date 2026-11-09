@@ -32,23 +32,28 @@ def ozon():
   for sku,(sold,ret,title,osku) in sorted(grouped.items()):w.writerow([sku,title,osku,sold,ret,sold-ret])
  status["Ozon"]={"ok":True,"report_rows":len(items),"sku_count":len(grouped),"sold":sum(x[0] for x in grouped.values()),"returned":sum(x[1] for x in grouped.values())}
 def wb():
- token=os.getenv("WB_STATISTICS_API_KEY") or os.environ["WB_API_KEY"]
- params={"dateFrom":"2026-10-01","dateTo":"2026-10-31","limit":100000,"rrdid":0}
+ token=os.getenv("WB_FINANCE_API_KEY") or os.getenv("WB_API_KEY")
+ if not token:raise RuntimeError("No WB finance token configured")
+ # Financial report API replaced /api/v5/supplier/reportDetailByPeriod in July 2026.
+ payload={"dateFrom":"2026-10-01","dateTo":"2026-10-31","period":"weekly","limit":100000,"rrdId":0}
  allrows=[]
- for page in range(15):
-  res=req("GET","https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod",headers={"Authorization":token},params=params)
-  data=res.json()
-  if not isinstance(data,list):raise RuntimeError("unexpected WB response: "+str(data)[:250])
-  allrows+=data
-  if len(data)<100000:break
-  params["rrdid"]=data[-1]["rrd_id"];time.sleep(62)
+ for page in range(12):
+  response=req("POST","https://finance-api.wildberries.ru/api/finance/v1/sales-reports/detailed",headers={"Authorization":token},json=payload)
+  if response.status_code==204:break
+  chunk=response.json()
+  if not isinstance(chunk,list):raise RuntimeError("unexpected finance report payload: "+str(chunk)[:350])
+  if not chunk:break
+  allrows.extend(chunk)
+  if len(chunk)<100000:break
+  payload["rrdId"]=int(chunk[-1]["rrdId"])
+  time.sleep(62)
  save("wb_realization.json",allrows)
  grouped=collections.defaultdict(lambda:[0,0,0])
  kinds=collections.Counter()
  for x in allrows:
-  op=x.get("supplier_oper_name","")
+  op=x.get("supplierOperName","")
   kinds[op]+=1
-  sku=str(x.get("sa_name") or x.get("supplier_article") or x.get("nm_id") or "")
+  sku=str(x.get("vendorCode") or x.get("nmId") or "")
   if not sku:continue
   if op in ("Продажа","Возврат"):
    qty=int(x.get("quantity") or 1)
