@@ -34,3 +34,17 @@ No price mutation endpoint is called in this version.
 <!-- Telegram retest after chat id fix -->
 
 <!-- manual price alert verification -->
+
+
+## Temporary Ozon price-change pause — 2026-11-17
+
+Ozon price mutation is **disabled until the owner explicitly requests re-enabling**.
+
+- Scheduled **Ozon Price Check** continues every six hours: snapshot, RRP+5% checks, Telegram alerts, diagnostics.
+- Its automatic yellow/small-red repricing step, the post-change delay, and the second snapshot were removed.
+- The **Ozon** job in **Mark Shmidt promo 19 Oct - 20 Nov** is disabled, including the scheduled November 21 restoration.
+- The **Yandex** job of the promotion and other marketplaces were not changed.
+- Both write functions (auto-fix and promo restore/reprice) require `OZON_PRICE_WRITES_ENABLED=YES` as an additional explicit opt-in. Without it, no Ozon price POST is issued.
+- To re-enable: confirm the desired pricing rules, restore the Ozon job/step in workflows, and set the explicit write opt-in. Do not rely on the legacy approval flags alone.
+
+Note: this repository-only change cannot retroactively stop a GitHub Actions run that was already executing when the commits were made.
