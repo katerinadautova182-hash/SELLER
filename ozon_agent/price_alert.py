@@ -226,7 +226,7 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list
                 f"+{delta} ₽ / +{v['delta_pct']:.1f}%"
             )
 
-    if not red and not white:
+    if not red and not yellow and not white:
         lines.append("")
         lines.append("Отклонений нет.")
 
