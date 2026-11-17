@@ -49,6 +49,9 @@ def plan_yellow_updates(snapshot: dict, rrp_map: dict[str, float]) -> list[dict]
 
 
 def apply_updates(client, planned: list[dict]) -> list[dict]:
+    # Price writes are paused by default, even for manual script invocations.
+    if os.getenv("OZON_PRICE_WRITES_ENABLED", "").strip().upper() != "YES":
+        raise RuntimeError("Ozon price writes are paused (OZON_PRICE_WRITES_ENABLED is not YES)")
     results: list[dict] = []
     for row in planned:
         seller_price = int(row["seller_price_after"])
