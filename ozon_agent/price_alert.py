@@ -189,7 +189,7 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list
     lines = [
         "Ozon — контроль цен",
         f"🔴 Ниже РРЦ: {len(red)}",
-        f"🟡 Осталось после автокоррекции: {len(yellow)}",
+        f"🟡 Ниже РРЦ + 5%: {len(yellow)}",
         f"⚪ Аномально высокая цена: {len(white)}",
     ]
 
@@ -204,7 +204,7 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list
 
     if yellow:
         lines.append("")
-        lines.append("🟡 Осталось после автокоррекции")
+        lines.append("🟡 Ниже РРЦ + 5%")
         for v in yellow:
             p = f"{v['customer_price']:,.0f}".replace(",", " ")
             floor = f"{v['floor']:,.0f}".replace(",", " ")
@@ -288,7 +288,7 @@ def main() -> None:
     send_telegram(msg)
     print(
         f"Sent price report: red={len(red)}; white={len(white)}; "
-        f"yellow={len(yellow)} auto-managed silently."
+        f"yellow={len(yellow)}; monitoring only, no prices changed."
     )
 
 
