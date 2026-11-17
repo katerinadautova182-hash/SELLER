@@ -70,6 +70,9 @@ def plan(snapshot: dict, rrp_map: dict[str, float], mode: str) -> list[dict]:
 
 
 def apply(client: OzonClient, rows: list[dict]) -> list[dict]:
+    # Promotion and restoration price writes are paused by default.
+    if os.getenv("OZON_PRICE_WRITES_ENABLED", "").strip().upper() != "YES":
+        raise RuntimeError("Ozon price writes are paused (OZON_PRICE_WRITES_ENABLED is not YES)")
     out = []
     for row in rows:
         value = int(row["seller_after"])
