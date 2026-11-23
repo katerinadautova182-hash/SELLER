@@ -57,7 +57,12 @@ def is_main_equipment(offer_id: str | None, name: str | None = None) -> bool:
     if any(word in description for word in _DEVICE_WORDS):
         return True
     key = normalize_sku(canonical_sku(offer_id))
-    return bool(key and key.startswith(_DEVICE_PREFIXES))
+    if not key:
+        return False
+    # Model 201 must not swallow unrelated SKU MS2011, and 701 must not
+    # classify 7011: colour/text variants are allowed, numeric extensions not.
+    return any(key == prefix or (key.startswith(prefix) and
+               not key[len(prefix)].isdigit()) for prefix in _DEVICE_PREFIXES)
 
 
 def target_band(rrp: float, offer_id: str | None,
