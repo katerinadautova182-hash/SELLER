@@ -38,6 +38,7 @@ _ACCESSORY_WORDS = (
     "расчёск", "расческ", "comb", "нож", "лезвие", "насадк",
     "brush", "щётка", "щетка", "брашинг", "кейс", "чехол",
     "заряд", "подставк", "адаптер", "аксессуар", "oil",
+    "blade", "guard", "attachment", "replacement",
 )
 _DEVICE_WORDS = (
     "машинка для стриж", "триммер", "электробрит", "шейвер",
@@ -51,7 +52,7 @@ def is_main_equipment(offer_id: str | None, name: str | None = None) -> bool:
     """Conservative SKU/category detection; unknowns keep their own pricing."""
     if is_clearance_sku(offer_id):
         return False
-    description = str(name or "").casefold()
+    description = (str(name or "") + " " + str(offer_id or "")).casefold()
     if any(word in description for word in _ACCESSORY_WORDS):
         return False
     if any(word in description for word in _DEVICE_WORDS):
