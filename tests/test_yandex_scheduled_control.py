@@ -24,7 +24,7 @@ def test_history_rolling():
     assert len(h["403"])==28 and h["403"][-1]==4100
 
 def test_remaining_red_and_yellow():
-    rows=[{"offerId":"403","onDisplay":4000},{"offerId":"GSH9","onDisplay":1750}]
+    rows=[{"offerId":"403","onDisplay":4000},{"offerId":"MS 207 R","onDisplay":3800}]
     lines,remaining=report_lines([],[],rows,[],{})
     assert len(remaining)==2
     assert any("Ниже РРЦ" in line for line in lines)
