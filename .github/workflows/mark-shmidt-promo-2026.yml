@@ -1,4 +1,4 @@
-name: Mark Shmidt promo 19 Oct - 20 Nov
+name: Mark Shmidt promo 19 Oct - 15 Dec
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     paths:
       - ".github/workflows/mark-shmidt-promo-2026.yml"
   schedule:
-    # Promo is inclusive through 20 Nov (Moscow). Restore early on 21 Nov.
-    - cron: "20 0 21 11 *"
+    # Promo is inclusive through 15 Dec (Moscow). Restore early on 16 Dec.
+    - cron: "20 0 16 12 *"
   workflow_dispatch:
 
 permissions:
@@ -19,7 +19,7 @@ jobs:
     concurrency:
       group: ozon-margin-check
       cancel-in-progress: false
-    # Пауза по распоряжению владельца: Ozon не изменяет цены, включая восстановление 21 ноября.
+    # Пауза по распоряжению владельца: Ozon не изменяет цены, включая восстановление 16 декабря.
     if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
