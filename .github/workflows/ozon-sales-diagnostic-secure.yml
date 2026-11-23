@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - ".github/workflows/ozon-sales-diagnostic-secure.yml"
+      - "reporting/ozon_secure_sales_diagnostic.py"
   workflow_dispatch:
 
 permissions:
