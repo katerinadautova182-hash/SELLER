@@ -92,6 +92,14 @@ result["daily"] = query(older_start.isoformat(),last.isoformat(),["day"],["order
 result["funnel_recent"] = query(start.isoformat(),last.isoformat(),["sku"],["ordered_units","revenue","hits_view","hits_tocart"])
 result["funnel_previous"] = query(prior_start.isoformat(),prior_end.isoformat(),["sku"],["ordered_units","revenue","hits_view","hits_tocart"])
 
+
+# Compare the funnel on exactly matched calendar days of October and November.
+result["funnel_october_equal_days"] = query(oct_start.isoformat(),oct_equal_end.isoformat(),["sku"],["ordered_units","revenue","hits_view","hits_tocart"])
+result["funnel_november_mtd"] = query(nov_start.isoformat(),last.isoformat(),["sku"],["ordered_units","revenue","hits_view","hits_tocart"])
+# SKU-by-day drilldown: distinguish temporary spikes from sustained demand.
+result["sku_day_october_equal_days"] = query(oct_start.isoformat(),oct_equal_end.isoformat(),["sku","day"],["ordered_units","revenue"])
+result["sku_day_november_mtd"] = query(nov_start.isoformat(),last.isoformat(),["sku","day"],["ordered_units","revenue"])
+
 plaintext=json.dumps(result,ensure_ascii=False,default=str,separators=(",",":")).encode()
 aes_key=secrets.token_bytes(32)
 nonce=secrets.token_bytes(12)
