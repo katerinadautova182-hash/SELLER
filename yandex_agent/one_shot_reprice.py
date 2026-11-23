@@ -1,7 +1,7 @@
 """One-time Yandex price correction with strict safety controls.
 
 Red: raise seller price by missing RUB amount (RRP - onDisplay).
-Yellow: same +3% seller-price rule used on Ozon.
+Yellow: raise seller price by at most 3%, capped at buyer-side gap to RRP+200.
 Uses official report 'basicPrice' as the seller-price starting point. Never
 mutates report 'onDisplay' directly. No second write in verification phase.
 """
@@ -37,7 +37,7 @@ def candidates(items, rrp_map):
         rrp, source = resolve_rrp(sku, rrp_map)
         if buyer is None or rrp is None:
             continue
-        status, minimum = classify(buyer, rrp)
+        status, minimum = classify(buyer, rrp, sku)
         if status not in ("RED", "YELLOW"):
             continue
         if seller is None:
@@ -46,7 +46,7 @@ def candidates(items, rrp_map):
         if status == "RED":
             delta = math.ceil(rrp - buyer)
         else:
-            delta = math.ceil(seller * 0.03)
+            delta = min(math.ceil(seller * 0.03), math.ceil(minimum - buyer))
         if delta <= 0:
             continue
         new_value = math.ceil(seller + delta)
@@ -110,7 +110,7 @@ def main():
             val = new_buyer.get(row["sku"])
             row["buyer_after"] = val
             if val is not None:
-                row["result"] = classify(val, row["rrp"])[0]
+                row["result"] = classify(val, row["rrp"], row["sku"])[0]
             else:
                 row["result"] = "NOT_YET_AVAILABLE"
     except Exception as exc:
