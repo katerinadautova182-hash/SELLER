@@ -88,7 +88,7 @@ def run():
         buyer=number(item.get("onDisplay"))
         rrp,_=resolve_rrp(sku,rrp_map)
         if rrp is None or buyer is None: continue
-        status,minimum=classify(buyer,rrp)
+        status,minimum=classify(buyer,rrp,sku)
         if status != "OK":
             final_items.append({"sku":sku,"buyer":buyer,"minimum":minimum,"status":status})
     target_status = "RED" if zone == "red" else "YELLOW"
