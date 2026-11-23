@@ -1,0 +1,36 @@
+name: Ozon Sales Diagnostic (Encrypted Read Only)
+
+on:
+  push:
+    paths:
+      - ".github/workflows/ozon-sales-diagnostic-secure.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install minimal dependencies
+        run: pip install requests cryptography
+      - name: Collect Ozon Seller analytics, then encrypt output
+        env:
+          OZON_CLIENT_ID: ${{ secrets.OZON_CLIENT_ID }}
+          OZON_API_KEY: ${{ secrets.OZON_API_KEY }}
+          OZON_PERFORMANCE_CLIENT_ID: ${{ secrets.OZON_PERFORMANCE_CLIENT_ID }}
+          OZON_PERFORMANCE_CLIENT_SECRET: ${{ secrets.OZON_PERFORMANCE_CLIENT_SECRET }}
+        run: python reporting/ozon_secure_sales_diagnostic.py
+      - name: Upload ciphertext only (no commercial data in public logs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ozon-sales-encrypted
+          path: artifacts/ozon_secure/
+          retention-days: 2
+          if-no-files-found: error
