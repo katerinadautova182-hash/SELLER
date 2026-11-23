@@ -27,7 +27,7 @@ def test_ozon_yellow_only_for_known_equipment():
         {"offer_id": "JRL-BR1-32", "customer_price": 10020, "customer_price_verified": True,
          "eligibility": "ELIGIBLE"},
     ]}
-    red, yellow, stats = collect_violations(snapshot, {"MS701": 10100, "JRLBR132": 10000})
+    red, yellow, stats = collect_violations(snapshot, {"MS701": 10100, "BR132MM": 10000})
     assert not red
     assert [r["offer_id"] for r in yellow] == ["MS701"]
     assert stats["checked"] == 2
