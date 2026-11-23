@@ -32,7 +32,7 @@ def format_alerts(results: list[dict], stats: dict) -> list[str]:
     summary = (
         "Яндекс Маркет — контроль цен на витрине\n"
         f"🔴 Ниже РРЦ: {len(red)}\n"
-        f"🟡 Ниже РРЦ+5%: {len(yellow)}\n"
+        f"🟡 Ниже ориентира РРЦ+200 ₽: {len(yellow)}\n"
         f"✅ Соответствуют: {stats['OK']}\n"
         f"⚪ Нет цены: {stats['PRICE_NOT_NUMERIC']}; нет РРЦ: {stats['MISSING_RRP']}"
     )
@@ -47,9 +47,9 @@ def format_alerts(results: list[dict], stats: dict) -> list[str]:
         )
     if yellow:
         sections.append(
-            "🟡 Ниже РРЦ+5%\n" + "\n".join(
+            "🟡 Ниже ориентира РРЦ+200 ₽\n" + "\n".join(
                 f"• {r['offer_id']}: покупатель {money(r['display_price'])} ₽, "
-                f"минимум {money(r['target_price'])} ₽ → не хватает "
+                "f"ориентир {money(r['target_price'])} ₽ → не хватает "
                 f"{money(r['target_price'] - r['display_price'])} ₽"
                 for r in yellow
             )
