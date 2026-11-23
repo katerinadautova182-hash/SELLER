@@ -13,8 +13,8 @@ def test_historical_baseline_not_rrp():
 
 def test_both_zones_single_increment():
     rows=[{"offerId":"403","onDisplay":3885,"basicPrice":7400},
-          {"offerId":"GSH9","onDisplay":1776,"basicPrice":3100}]
-    plan,skip=candidates(rows,{"GSH9":1718})
+          {"offerId":"MS 207 R","onDisplay":3800,"basicPrice":3100}]
+    plan,skip=candidates(rows,{})
     assert [r["status"] for r in plan]==["RED","YELLOW"]
     assert plan[0]["seller_after"]==8026
     assert plan[1]["seller_after"]==3193
@@ -24,7 +24,7 @@ def test_history_rolling():
     assert len(h["403"])==28 and h["403"][-1]==4100
 
 def test_remaining_red_and_yellow():
-    rows=[{"offerId":"403","onDisplay":4000},{"offerId":"GSH9","onDisplay":1750}]
-    lines,remaining=report_lines([],[],rows,[],{"GSH9":1718})
+    rows=[{"offerId":"403","onDisplay":4000},{"offerId":"MS 207 R","onDisplay":3800}]
+    lines,remaining=report_lines([],[],rows,[],{})
     assert len(remaining)==2
     assert any("Ниже РРЦ" in line for line in lines)

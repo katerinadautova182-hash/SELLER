@@ -40,9 +40,9 @@ No price mutation endpoint is called in this version.
 
 Ozon price mutation is **disabled until the owner explicitly requests re-enabling**.
 
-- Scheduled **Ozon Price Check** continues every six hours: snapshot, RRP+5% checks, Telegram alerts, diagnostics.
+- Scheduled **Ozon Price Check** continues every six hours: snapshot, hard RRP checks, preferred RRP+200–500 RUB equipment targets, Telegram alerts, diagnostics.
 - Its automatic yellow/small-red repricing step, the post-change delay, and the second snapshot were removed.
-- The **Ozon** job in **Mark Shmidt promo 19 Oct - 20 Nov** is disabled, including the scheduled November 21 restoration.
+- The **Ozon** job in **Mark Shmidt promo 19 Oct - 15 Dec** is disabled, including the planned December 16 restoration.
 - The **Yandex** job of the promotion and other marketplaces were not changed.
 - Both write functions (auto-fix and promo restore/reprice) require `OZON_PRICE_WRITES_ENABLED=YES` as an additional explicit opt-in. Without it, no Ozon price POST is issued.
 - To re-enable: confirm the desired pricing rules, restore the Ozon job/step in workflows, and set the explicit write opt-in. Do not rely on the legacy approval flags alone.

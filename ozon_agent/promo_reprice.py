@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import timedelta
 from math import ceil
 from pathlib import Path
 
@@ -27,7 +28,7 @@ def _mode_allowed(mode: str) -> bool:
     if mode == "promo":
         return promo_active(day)
     # Automatic restore is only for the day immediately after the promo.
-    return day.year == 2026 and day.month == 11 and day.day == 21
+    return day == PROMO_END + timedelta(days=1)
 
 
 def plan(snapshot: dict, rrp_map: dict[str, float], mode: str) -> list[dict]:

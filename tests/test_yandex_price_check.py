@@ -52,9 +52,13 @@ def test_html_cleanup_keeps_visible_pay_label():
 
 
 def test_rrp_thresholds():
-    assert classify(999, 1000)[0] == "RED"
-    assert classify(1000, 1000)[0] == "YELLOW"
-    assert classify(1049, 1000)[0] == "YELLOW"
-    status, floor = classify(1050, 1000)
+    assert classify(999, 1000, "MS701")[0] == "RED"
+    assert classify(1000, 1000, "MS701")[0] == "YELLOW"
+    assert classify(1199, 1000, "MS701")[0] == "YELLOW"
+    status, floor = classify(1200, 1000, "MS701")
     assert status == "OK"
-    assert floor == 1050
+    assert floor == 1200
+
+
+def test_accessory_only_has_hard_rrp_check():
+    assert classify(1020, 1000, "J304") == ("OK", 1000.0)

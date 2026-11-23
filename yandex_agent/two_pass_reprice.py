@@ -2,7 +2,7 @@
 
 Each pass uses a fresh official Yandex goods-prices report:
 - RED (onDisplay < RRP): seller price += ceil((RRP - onDisplay) * 1.5)
-- YELLOW (RRP <= onDisplay < ceil(RRP*1.05)): seller price += 3%
+- YELLOW (main equipment below RRP+200): seller price += at most 3%
 Two write passes maximum, then one final verification report. Never lowers prices.
 """
 from __future__ import annotations
@@ -38,12 +38,12 @@ def plan(rows, rrp_map):
         rrp, source = resolve_rrp(sku, rrp_map)
         if buyer is None or seller is None or rrp is None:
             continue
-        status, minimum = classify(buyer, rrp)
+        status, minimum = classify(buyer, rrp, sku)
         if status == "RED":
             missing = max(0.0, float(rrp) - float(buyer))
             increase = float(math.ceil(missing * 1.5))
         elif status == "YELLOW":
-            increase = float(math.ceil(float(seller) * 0.03))
+            increase = float(min(math.ceil(float(seller) * 0.03), math.ceil(minimum - buyer)))
         else:
             continue
         if increase <= 0:
@@ -93,7 +93,7 @@ def main():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     state = {"business_id": business_id, "policy": {
         "red": "seller += ceil((RRP - onDisplay) * 1.5)",
-        "yellow": "seller += ceil(seller * 0.03)",
+        "yellow": "seller += min(ceil(seller * 0.03), ceil(target - onDisplay))",
         "passes": 2,
     }, "rounds": []}
 
@@ -123,7 +123,7 @@ def main():
         rrp, _ = resolve_rrp(sku, rrp_map)
         if buyer is None or rrp is None:
             continue
-        status, minimum = classify(float(buyer), float(rrp))
+        status, minimum = classify(float(buyer), float(rrp), sku)
         if status != "OK":
             remaining.append({
                 "sku": sku,

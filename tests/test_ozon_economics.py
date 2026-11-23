@@ -1,7 +1,7 @@
 from ozon_agent.economics import EconomicsInput, calculate_economics
 
 
-def test_rrp_plus_5_is_hard_floor():
+def test_rrp_is_hard_floor_not_five_percent():
     r = calculate_economics(EconomicsInput(
         purchase_price=1000,
         rrp=2000,
@@ -10,8 +10,8 @@ def test_rrp_plus_5_is_hard_floor():
         logistics_rub=100,
         target_margin_percent=0,
     ))
-    assert r.rrp_floor == 2100
-    assert r.minimum_allowed_price >= 2100
+    assert r.rrp_floor == 2000
+    assert r.minimum_allowed_price >= 2000
 
 
 def test_economic_floor_can_be_above_rrp_floor():
@@ -60,8 +60,14 @@ def test_customer_price_policy_uses_red_yellow_green_zones():
     status, _ = evaluate_customer_price_policy(customer_price=999, rrp=1000)
     assert status == "CRITICAL"
 
-    status, _ = evaluate_customer_price_policy(customer_price=1049, rrp=1000)
+    status, _ = evaluate_customer_price_policy(customer_price=1199, rrp=1000, offer_id="MS701")
     assert status == "WARNING"
 
-    status, _ = evaluate_customer_price_policy(customer_price=1050, rrp=1000)
+    status, _ = evaluate_customer_price_policy(customer_price=1200, rrp=1000, offer_id="MS701")
+    assert status == "OK"
+
+
+def test_accessories_are_not_forced_into_equipment_markups():
+    from ozon_agent.pricing import evaluate_customer_price_policy
+    status, _ = evaluate_customer_price_policy(customer_price=1030, rrp=1000, offer_id="J304")
     assert status == "OK"

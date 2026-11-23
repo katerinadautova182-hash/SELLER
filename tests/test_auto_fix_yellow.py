@@ -5,7 +5,7 @@ def test_plans_only_yellow_and_raises_seller_price_3_percent():
     snapshot = {
         "items": [
             {
-                "offer_id": "A",
+                "offer_id": "MS701",
                 "eligibility": "ELIGIBLE",
                 "customer_price_verified": True,
                 "customer_price": 102.0,
@@ -30,9 +30,9 @@ def test_plans_only_yellow_and_raises_seller_price_3_percent():
             },
         ]
     }
-    rrp = {"A": 100.0, "B": 100.0, "CУЦ": 100.0}
+    rrp = {"MS701": 100.0, "B": 100.0, "CУЦ": 100.0}
     planned = plan_yellow_updates(snapshot, rrp)
     assert len(planned) == 1
-    assert planned[0]["offer_id"] == "A"
+    assert planned[0]["offer_id"] == "MS701"
     assert planned[0]["seller_price_before"] == 200.0
     assert planned[0]["seller_price_after"] == 206.0

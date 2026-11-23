@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import time
+from datetime import timedelta
 from math import ceil
 from pathlib import Path
 
@@ -31,7 +32,7 @@ def _mode_allowed(mode: str) -> bool:
     day = moscow_date()
     if mode == "promo":
         return promo_active(day)
-    return day.year == 2026 and day.month == 11 and day.day == 21
+    return day == PROMO_END + timedelta(days=1)
 
 
 def plan(rows: list[dict], rrp_map: dict[str, float], mode: str) -> list[dict]:

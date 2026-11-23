@@ -11,7 +11,8 @@ from typing import Iterable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ozon_export.client import OzonClient
-from .economics import EconomicsInput, calculate_economics, RRP_FLOOR_FACTOR
+from .economics import EconomicsInput, calculate_economics
+from .pricing_policy import target_band
 
 
 def fetch_price_rows(client: "OzonClient", product_ids: Iterable[int]) -> list[dict]:
@@ -64,6 +65,7 @@ def evaluate_sku(*, ozon_row: dict, purchase_price: float, rrp: float,
         acquiring_rub=ozon_row["acquiring_rub"],
         other_direct_costs_rub=other_direct_costs_rub,
         target_margin_percent=target_margin_percent,
+        offer_id=ozon_row.get("offer_id") or "",
     ))
     return {**ozon_row, **asdict(result)}
 
@@ -133,13 +135,15 @@ def fetch_customer_prices(client: "OzonClient", skus: Iterable[int | str],
     return out
 
 
-def evaluate_customer_price_policy(*, customer_price: float | None, rrp: float) -> tuple[str, str]:
+def evaluate_customer_price_policy(*, customer_price: float | None, rrp: float,
+                                   offer_id: str | None = None) -> tuple[str, str]:
     if customer_price is None or customer_price <= 0:
         return (
             "PRICE_NOT_VERIFIED",
             "Цена для покупателя не подтверждена; РРЦ-проверка должна завершиться ошибкой.",
         )
-    floor = float(ceil(rrp * RRP_FLOOR_FACTOR))
+    band = target_band(rrp, offer_id)
+    floor = band[0] if band else float(ceil(rrp))
     if customer_price < rrp:
         return (
             "CRITICAL",
@@ -148,9 +152,9 @@ def evaluate_customer_price_policy(*, customer_price: float | None, rrp: float) 
     if customer_price < floor:
         return (
             "WARNING",
-            f"Цена для покупателя {customer_price:.2f} ниже РРЦ+5% ({floor:.2f}).",
+            f"Цена для покупателя {customer_price:.2f} ниже предпочтительного диапазона РРЦ+200–500 ₽ ({floor:.2f}).",
         )
     return (
         "OK",
-        f"Цена для покупателя подтверждена и не ниже РРЦ+5% ({floor:.2f}).",
+        f"Цена для покупателя подтверждена и не ниже применимого ориентира ({floor:.2f}).",
     )

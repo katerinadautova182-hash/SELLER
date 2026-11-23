@@ -4,6 +4,7 @@ from ozon_agent.promo_policy import (
     effective_rrp,
     is_promo_offer,
     promo_rrp,
+    target_buyer_price,
 )
 
 
@@ -25,8 +26,8 @@ def test_promo_only_inside_date_window():
     rrp = {"MS9905": 1000.0}
     assert effective_rrp("MS9905", 1000.0, rrp, date(2026, 10, 18)) == 1000.0
     assert effective_rrp("MS9905", 1000.0, rrp, date(2026, 10, 19)) == 700.0
-    assert effective_rrp("MS9905", 1000.0, rrp, date(2026, 11, 20)) == 700.0
-    assert effective_rrp("MS9905", 1000.0, rrp, date(2026, 11, 21)) == 1000.0
+    assert effective_rrp("MS9905", 1000.0, rrp, date(2026, 12, 15)) == 700.0
+    assert effective_rrp("MS9905", 1000.0, rrp, date(2026, 12, 16)) == 1000.0
 
 
 def test_8828_nonblack_uses_common_family_base():
@@ -39,3 +40,10 @@ def test_8828_nonblack_uses_common_family_base():
     assert promo_rrp("MS8828RED", 990.0, rrp) == 701.0
     assert promo_rrp("MS8828YELLOW", 1000.0, rrp) == 701.0
     assert promo_rrp("MS8828 BLACK", 1100.0, rrp) == 1100.0
+
+
+def test_promo_target_stays_in_new_rrp_plus_200_500_band():
+    rrp = {"MS9905": 1000.0}
+    assert target_buyer_price("MS9905", 1000.0, rrp, mode="promo") == 1000.0
+    assert target_buyer_price("MS9905", 1000.0, rrp, mode="restore") == 1300.0
+    assert target_buyer_price("J304", 1000.0, rrp, mode="promo") is None

@@ -2,8 +2,8 @@
 
 Business rule:
 - RED: public Yandex Pay price < RRP
-- YELLOW: RRP <= public Yandex Pay price < RRP + 5%
-- OK: public Yandex Pay price >= RRP + 5%
+- YELLOW: main equipment from RRP up to preferred RRP + 200 RUB
+- OK: at/above applicable target; special/unknown products only check RRP
 
 Promocodes, personal offers and ordinary seller prices are deliberately ignored.
 If the public Yandex Pay price cannot be attributed safely, no violation is
@@ -30,6 +30,7 @@ from ozon_agent.business_rules import (
 from ozon_agent.catalog import normalize_sku
 from ozon_agent.telegram import send_telegram
 from ozon_agent.promo_policy import effective_rrp
+from ozon_agent.pricing_policy import target_band
 from .client import YandexMarketClient
 from .storefront import fetch_pay_price
 
@@ -51,7 +52,6 @@ YANDEX_RRP_FROM_20261008 = {
     normalize_sku("PB74"): 151.0,
 }
 
-RRP_FACTOR = 1.05
 REGION_ID = int(os.getenv("YANDEX_MARKET_REGION_ID", "213"))
 
 
@@ -104,7 +104,7 @@ def resolve_rrp(offer_id: str, rrp_map: dict[str, float]) -> tuple[float | None,
     value, source = resolve_regular_rrp(offer_id, rrp_map)
     effective = effective_rrp(offer_id, value, rrp_map)
     if effective is not None and value is not None and effective != value:
-        return float(effective), "promo_20261019_20261120"
+        return float(effective), "promo_20261019_20261215"
     return value, source
 
 
@@ -149,8 +149,10 @@ def _catalog(client: YandexMarketClient) -> tuple[list[dict], list[str], list[di
     return mappings, seller_names, campaigns
 
 
-def classify(price: float, rrp: float) -> tuple[str, float]:
-    floor = float(ceil(rrp * RRP_FACTOR))
+def classify(price: float, rrp: float, offer_id: str | None = None,
+             name: str | None = None) -> tuple[str, float]:
+    band = target_band(rrp, offer_id, name)
+    floor = band[0] if band else float(ceil(rrp))
     if price < rrp:
         return "RED", floor
     if price < floor:
@@ -222,13 +224,16 @@ def build_rows(client: YandexMarketClient, rrp_map: dict[str, float]) -> tuple[l
             time.sleep(0.15)
             continue
 
-        status, floor = classify(float(observed.price), float(rrp))
+        status, floor = classify(float(observed.price), float(rrp), offer_id, name)
+        band = target_band(rrp, offer_id, name)
         rows.append({
             **base,
             "status": status,
             "rrp": rrp,
             "rrp_rule": rrp_rule,
             "green_floor": floor,
+            "target_upper": band[1] if band else None,
+            "above_target": bool(band and float(observed.price) > band[1]),
             "yandex_pay_price": float(observed.price),
             "showcase_url": observed.source_url,
             "pay_price_status": observed.status,
@@ -259,6 +264,7 @@ def build_rows(client: YandexMarketClient, rrp_map: dict[str, float]) -> tuple[l
         "ok": sum(1 for r in rows if r.get("status") == "OK"),
         "unverified": sum(1 for r in rows if r.get("status") == "UNVERIFIED"),
         "missing_rrp": sum(1 for r in rows if r.get("status") == "MISSING_RRP"),
+        "above_target": sum(1 for r in rows if r.get("above_target")),
     }
     return rows, stats
 
@@ -273,13 +279,14 @@ def report(rows: list[dict], stats: dict) -> str:
         f"Регион контроля: {stats['region_id']} (Москва)",
         f"Подтверждено витринных цен: {stats['verified']}",
         f"🔴 Ниже РРЦ: {len(red)}",
-        f"🟡 Ниже РРЦ+5%: {len(yellow)}",
+        f"🟡 Ниже ориентира РРЦ+200 ₽: {len(yellow)}",
+        f"ℹ️ Выше ориентира РРЦ+500 ₽: {stats.get('above_target', 0)}",
         f"⚪ Не удалось подтвердить Pay-цену: {len(unverified)}",
         "",
         "Промокоды и персональные скидки НЕ учитываются.",
     ]
 
-    for title, subset in (("🔴 Ниже РРЦ", red), ("🟡 Между РРЦ и РРЦ+5%", yellow)):
+    for title, subset in (("🔴 Ниже РРЦ", red), ("🟡 Ниже ориентира РРЦ+200 ₽", yellow)):
         if subset:
             lines.extend(("", title))
             for row in subset[:30]:
@@ -291,6 +298,14 @@ def report(rows: list[dict], stats: dict) -> str:
                 )
             if len(subset) > 30:
                 lines.append(f"... и ещё {len(subset) - 30}")
+
+    above = [r for r in rows if r.get("above_target")]
+    if above:
+        lines.extend(("", "ℹ️ Выше целевого диапазона (только информация, без автоснижения)"))
+        for row in above[:15]:
+            lines.append(f"• {row['offer_id']}: Пэй {row['yandex_pay_price']:,.0f} ₽ / верх цели {row['target_upper']:,.0f} ₽")
+        if len(above) > 15:
+            lines.append(f"... и ещё {len(above) - 15}")
 
     if unverified:
         lines.extend(("", "⚪ Pay-цена не подтверждена (первые 15)"))

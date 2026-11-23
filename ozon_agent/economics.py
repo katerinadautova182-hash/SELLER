@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from .pricing_policy import target_band
 
 IMPORT_LOGISTICS_FACTOR = 1.35  # purchase price + 35% delivery/customs
-RRP_FLOOR_FACTOR = 1.05         # never below RRP + 5%
+RRP_FLOOR_FACTOR = 1.00         # hard RRP floor; preferred equipment band is +200..500 RUB
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class EconomicsInput:
     acquiring_rub: float = 0.0
     other_direct_costs_rub: float = 0.0
     target_margin_percent: float = 0.0
+    offer_id: str = ""  # optional: apply preferred equipment band only when identified
 
 
 @dataclass(frozen=True)
@@ -66,8 +68,9 @@ def calculate_economics(p: EconomicsInput) -> EconomicsResult:
     profit = price - commission(price) - direct fixed costs - landed cost
     operating margin = profit / price
 
-    The commercial floor is always at least RRP * 1.05.
-    The economic floor can be higher when Ozon costs make RRP+5% insufficient.
+    Hard commercial floor is RRP. For identified main equipment, the preferred
+    buyer-price band is RRP+200..500 RUB (advisory, not a hard legal floor).
+    The economic floor can be higher when Ozon costs require it.
     """
     _validate(p)
 
@@ -91,10 +94,13 @@ def calculate_economics(p: EconomicsInput) -> EconomicsResult:
         reason = "Продажа убыточна: текущая цена ниже точки безубыточности."
     elif p.current_price < rrp_floor:
         status = "CRITICAL"
-        reason = "Цена ниже коммерческого минимума РРЦ + 5%."
+        reason = "Цена ниже коммерческого минимума РРЦ."
     elif p.current_price < minimum_allowed:
         status = "DANGER"
         reason = "Цена прибыльна, но не обеспечивает заданную минимальную маржинальность."
+    elif target_band(p.rrp, p.offer_id) and p.current_price < target_band(p.rrp, p.offer_id)[0]:
+        status = "WARNING"
+        reason = "Цена ниже предпочтительного диапазона РРЦ + 200–500 ₽."
     elif safety_buffer < 5:
         status = "WARNING"
         reason = "Слишком маленький запас до точки безубыточности."
