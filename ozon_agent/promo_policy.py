@@ -1,4 +1,4 @@
-"""Temporary Mark Shmidt promo policy (19 Oct through 20 Nov 2026, Moscow time).
+"""Temporary Mark Shmidt promo policy (19 Oct through 15 Dec 2026, Moscow time).
 
 No RRP values are stored here. Promo RRPs are derived at runtime from the
 existing private RRP map, so the public repository never contains the price list.
@@ -11,9 +11,10 @@ from zoneinfo import ZoneInfo
 
 from .business_rules import box_rule, canonical_sku, manual_rrp
 from .catalog import normalize_sku
+from .pricing_policy import steering_price
 
 PROMO_START = date(2026, 10, 19)
-PROMO_END = date(2026, 11, 20)
+PROMO_END = date(2026, 12, 15)
 PROMO_FACTOR = 0.70
 MOSCOW = ZoneInfo("Europe/Moscow")
 
@@ -107,8 +108,8 @@ def effective_rrp(offer_id: str | None, base_rrp: float | None,
 
 def target_buyer_price(offer_id: str | None, base_rrp: float | None,
                        rrp_map: dict[str, float], *, mode: str) -> float | None:
-    """Return the RRP+5% buyer-price floor for promo or restoration."""
+    """Return RRP+300 RUB steering point for promo or restoration."""
     if base_rrp is None or not is_promo_offer(offer_id):
         return None
     rrp = promo_rrp(offer_id, base_rrp, rrp_map) if mode == "promo" else float(base_rrp)
-    return float(ceil(float(rrp) * 1.05))
+    return steering_price(float(rrp), offer_id)
