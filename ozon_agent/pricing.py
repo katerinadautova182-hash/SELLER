@@ -65,6 +65,7 @@ def evaluate_sku(*, ozon_row: dict, purchase_price: float, rrp: float,
         acquiring_rub=ozon_row["acquiring_rub"],
         other_direct_costs_rub=other_direct_costs_rub,
         target_margin_percent=target_margin_percent,
+        offer_id=ozon_row.get("offer_id") or "",
     ))
     return {**ozon_row, **asdict(result)}
 
