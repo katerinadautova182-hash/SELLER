@@ -139,7 +139,7 @@ def run() -> int:
                 row["status"] = "MISSING_RRP"
                 row["rrp_suggestions"] = suggest_rrp(offer_id, rrp_map)
             else:
-                row["status"], row["target_price"] = classify(buyer_price, rrp)
+                row["status"], row["target_price"] = classify(buyer_price, rrp, offer_id)
             results.append(row)
     stats = {key: sum(r["status"] == key for r in results) for key in (
         "RED", "YELLOW", "OK", "MISSING_RRP", "PRICE_NOT_NUMERIC")}
