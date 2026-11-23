@@ -49,7 +49,7 @@ def format_alerts(results: list[dict], stats: dict) -> list[str]:
         sections.append(
             "🟡 Ниже ориентира РРЦ+200 ₽\n" + "\n".join(
                 f"• {r['offer_id']}: покупатель {money(r['display_price'])} ₽, "
-                "f"ориентир {money(r['target_price'])} ₽ → не хватает "
+                f"ориентир {money(r['target_price'])} ₽ → не хватает "
                 f"{money(r['target_price'] - r['display_price'])} ₽"
                 for r in yellow
             )
