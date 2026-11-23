@@ -66,7 +66,7 @@ def report_lines(changes, skipped, latest, high, rrp_map):
         rrp, _ = resolve_rrp(sku, rrp_map)
         if not sku or value is None or rrp is None or is_clearance_sku(sku):
             continue
-        status, target = classify(value, rrp)
+        status, target = classify(value, rrp, sku)
         if status != "OK":
             remaining.append({"sku": sku, "status": status, "price": value, "rrp": rrp, "target": target})
     red = sorted((x for x in remaining if x["status"] == "RED"), key=lambda x: x["price"] - x["rrp"])
@@ -74,16 +74,16 @@ def report_lines(changes, skipped, latest, high, rrp_map):
     lines = ["Яндекс Маркет — контроль после автокоррекции",
              f"Изменено цен: {len(changes)}; пропущено: {len(skipped)}",
              f"🔴 Ниже РРЦ: {len(red)}",
-             f"🟡 Ниже РРЦ+5%: {len(yellow)}",
+             f"🟡 Ниже ориентира РРЦ+200 ₽: {len(yellow)}",
              f"⚪ Аномально высокая цена: {len(high)}"]
-    for title, subset in (("🔴 Ниже РРЦ", red), ("🟡 Ниже РРЦ+5%", yellow)):
+    for title, subset in (("🔴 Ниже РРЦ", red), ("🟡 Ниже ориентира РРЦ+200 ₽", yellow)):
         if subset:
             lines.append("")
             lines.append(title)
             for x in subset:
                 gap = (x["rrp"] if x["status"] == "RED" else x["target"]) - x["price"]
                 lines.append(f"• {x['sku']}: покупатель {money(x['price'])} ₽, "
-                             f"{'РРЦ' if x['status']=='RED' else 'минимум'} "
+                             f"{'РРЦ' if x['status']=='RED' else 'ориентир'} "
                              f"{money(x['rrp'] if x['status']=='RED' else x['target'])} ₽"
                              f" → не хватает {money(gap)} ₽")
     if high:
