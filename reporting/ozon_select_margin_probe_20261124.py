@@ -79,6 +79,37 @@ for month in [10,11]:
     try:
         raw=fetch_accruals_for_day(c,date)
         out["accrual_sku"][date]=aggregate_sku_finance(raw)
+        # Financial components excluded by legacy aggregator: buyer sale, Ozon compensation and adjusted commission.
+        extra={}
+        for acc in raw:
+            if str(acc.get("accrued_category") or "").upper()!="POSTING":
+                continue
+            for p in ((acc.get("posting") or {}).get("products") or []):
+                sku=str(p.get("sku") or "")
+                if not sku:continue
+                comm=p.get("commission") or {}
+                d=extra.setdefault(sku,{"sale_price_rub":0.0,"bonus_rub":0.0,
+                    "coinvestment_rub":0.0,"adjusted_commission_rub":0.0,
+                    "posting_net_rub":0.0,"posting_rows":0,
+                    "commission_ratio_values":[]})
+                d["posting_rows"]+=1
+                def money(z):
+                    if isinstance(z,dict):z=z.get("amount")
+                    return num(z)
+                sp=money(comm.get("sale_price"))
+                cm=money(comm.get("sale_commission"))
+                bonus=money(comm.get("bonus"))
+                co=money(comm.get("coinvestment"))
+                deliv=money((p.get("delivery") or {}).get("total_accrued"))
+                d["sale_price_rub"]+=sp
+                d["bonus_rub"]+=bonus
+                d["coinvestment_rub"]+=co
+                d["adjusted_commission_rub"]+=money(comm.get("commission"))
+                d["posting_net_rub"]+=sp+cm+bonus+co+deliv
+                ratio=comm.get("commission_ratio")
+                if ratio not in (None,""):
+                    d["commission_ratio_values"].append(str(ratio))
+        out.setdefault("accrual_extra",{})[date]=extra
         out["accrual_non_item"][date]=aggregate_non_item_finance(raw,type_map)
     except Exception as e:
         out["errors"].append({"op":"accrual/by-day","day":date,"error":str(e)[:160]})
