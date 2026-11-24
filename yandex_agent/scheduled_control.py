@@ -78,7 +78,7 @@ def report_lines(changes, skipped, latest, high, rrp_map):
     lines = ["Яндекс Маркет — контроль после автокоррекции",
              f"Изменено цен: {len(changes)}; пропущено: {len(skipped)}",
              f"🔴 Ниже РРЦ: {len(red)}",
-             f"🟡 Ниже ориентира РРЦ+200 ₽: {len(yellow)}",
+             f"🟡 Ниже РРЦ+200 ₽ более чем на 10 ₽: {len(yellow)}",
              f"ℹ️ Выше РРЦ+1 000 ₽ более чем на 10 ₽: {len(above_target)}",
              f"⚪ Аномально высокая цена: {len(high)}"]
     for title, subset in (("🔴 Ниже РРЦ", red), ("🟡 Ниже ориентира РРЦ+200 ₽", yellow)):
