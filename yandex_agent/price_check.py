@@ -30,7 +30,7 @@ from ozon_agent.business_rules import (
 from ozon_agent.catalog import normalize_sku
 from ozon_agent.telegram import send_telegram
 from ozon_agent.promo_policy import effective_rrp
-from ozon_agent.pricing_policy import target_band
+from ozon_agent.pricing_policy import target_band, price_band_deviation, TARGET_TOLERANCE_RUB
 from .client import YandexMarketClient
 from .storefront import fetch_pay_price
 
@@ -155,7 +155,7 @@ def classify(price: float, rrp: float, offer_id: str | None = None,
     floor = band[0] if band else float(ceil(rrp))
     if price < rrp:
         return "RED", floor
-    if price < floor:
+    if band and price < floor - TARGET_TOLERANCE_RUB:
         return "YELLOW", floor
     return "OK", floor
 
@@ -233,7 +233,7 @@ def build_rows(client: YandexMarketClient, rrp_map: dict[str, float]) -> tuple[l
             "rrp_rule": rrp_rule,
             "green_floor": floor,
             "target_upper": band[1] if band else None,
-            "above_target": bool(band and float(observed.price) > band[1]),
+            "above_target": price_band_deviation(float(observed.price), rrp, offer_id, name) == "ABOVE",
             "yandex_pay_price": float(observed.price),
             "showcase_url": observed.source_url,
             "pay_price_status": observed.status,
@@ -280,7 +280,7 @@ def report(rows: list[dict], stats: dict) -> str:
         f"Подтверждено витринных цен: {stats['verified']}",
         f"🔴 Ниже РРЦ: {len(red)}",
         f"🟡 Ниже ориентира РРЦ+200 ₽: {len(yellow)}",
-        f"ℹ️ Выше ориентира РРЦ+500 ₽: {stats.get('above_target', 0)}",
+        f"ℹ️ Выше РРЦ+1 000 ₽ (допуск 10 ₽): {stats.get('above_target', 0)}",
         f"⚪ Не удалось подтвердить Pay-цену: {len(unverified)}",
         "",
         "Промокоды и персональные скидки НЕ учитываются.",
@@ -301,7 +301,7 @@ def report(rows: list[dict], stats: dict) -> str:
 
     above = [r for r in rows if r.get("above_target")]
     if above:
-        lines.extend(("", "ℹ️ Выше целевого диапазона (только информация, без автоснижения)"))
+        lines.extend(("", "ℹ️ Выше РРЦ+1 000 ₽ более чем на 10 ₽ (без автоснижения)"))
         for row in above[:15]:
             lines.append(f"• {row['offer_id']}: Пэй {row['yandex_pay_price']:,.0f} ₽ / верх цели {row['target_upper']:,.0f} ₽")
         if len(above) > 15:
@@ -316,7 +316,7 @@ def report(rows: list[dict], stats: dict) -> str:
 
     if stats["verified"] == 0:
         lines.extend(("", "КРИТИЧЕСКАЯ ОШИБКА: ни одна цена Яндекс Пэй не подтверждена. Контроль РРЦ НЕ ВЫПОЛНЕН."))
-    elif not red and not yellow:
+    elif not red and not yellow and not stats.get('above_target'):
         lines.extend(("", "Нарушений среди подтвержденных цен с картой Пэй нет."))
 
     return "\n".join(lines)
