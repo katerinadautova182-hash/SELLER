@@ -279,7 +279,7 @@ def report(rows: list[dict], stats: dict) -> str:
         f"Регион контроля: {stats['region_id']} (Москва)",
         f"Подтверждено витринных цен: {stats['verified']}",
         f"🔴 Ниже РРЦ: {len(red)}",
-        f"🟡 Ниже ориентира РРЦ+200 ₽: {len(yellow)}",
+        f"🟡 Ниже РРЦ+200 ₽ более чем на 10 ₽: {len(yellow)}",
         f"ℹ️ Выше РРЦ+1 000 ₽ (допуск 10 ₽): {stats.get('above_target', 0)}",
         f"⚪ Не удалось подтвердить Pay-цену: {len(unverified)}",
         "",
