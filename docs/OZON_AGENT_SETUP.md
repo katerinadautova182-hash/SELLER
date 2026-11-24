@@ -40,7 +40,7 @@ No price mutation endpoint is called in this version.
 
 Ozon price mutation is **disabled until the owner explicitly requests re-enabling**.
 
-- Scheduled **Ozon Price Check** continues every six hours: snapshot, hard RRP checks, preferred RRP+200–500 RUB equipment targets, Telegram alerts, diagnostics.
+- Scheduled **Ozon Price Check** continues every six hours: snapshot, hard RRP checks, preferred RRP+200–1000 RUB equipment targets (10 RUB monitoring tolerance), Telegram alerts, diagnostics.
 - Its automatic yellow/small-red repricing step, the post-change delay, and the second snapshot were removed.
 - The **Ozon** job in **Mark Shmidt promo 19 Oct - 15 Dec** is disabled, including the planned December 16 restoration.
 - The **Yandex** job of the promotion and other marketplaces were not changed.

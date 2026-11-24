@@ -20,6 +20,7 @@ import requests
 from .client import YandexMarketClient
 from .price_check import _catalog, classify, load_rrp, resolve_rrp
 from ozon_agent.business_rules import is_clearance_sku
+from ozon_agent.pricing_policy import target_band, price_band_deviation
 from ozon_agent.telegram import send_telegram
 from .reporting import format_alerts, suggest_rrp
 
@@ -139,11 +140,15 @@ def run() -> int:
                 row["status"] = "MISSING_RRP"
                 row["rrp_suggestions"] = suggest_rrp(offer_id, rrp_map)
             else:
-                row["status"], row["target_price"] = classify(buyer_price, rrp, offer_id)
+                row["status"], row["target_price"] = classify(buyer_price, rrp, offer_id, row["name"])
+                band = target_band(rrp, offer_id, row["name"])
+                row["target_upper"] = band[1] if band else None
+                row["above_target"] = price_band_deviation(buyer_price, rrp, offer_id, row["name"]) == "ABOVE"
             results.append(row)
     stats = {key: sum(r["status"] == key for r in results) for key in (
         "RED", "YELLOW", "OK", "MISSING_RRP", "PRICE_NOT_NUMERIC")}
     stats["total"] = len(results)
+    stats["above_target"] = sum(bool(r.get("above_target")) for r in results)
     verified = stats["RED"] + stats["YELLOW"] + stats["OK"]
     stats["verified"] = verified
     path = Path(args.output)

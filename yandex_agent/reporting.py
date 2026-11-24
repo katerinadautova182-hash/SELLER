@@ -29,11 +29,14 @@ def format_alerts(results: list[dict], stats: dict) -> list[str]:
         (r for r in results if r["status"] == "YELLOW"),
         key=lambda r: (r["display_price"] - r["target_price"], r["offer_id"]),
     )
+    above = sorted((r for r in results if r.get("above_target")),
+                   key=lambda r: (r["target_upper"] - r["display_price"], r["offer_id"]))
     summary = (
         "Яндекс Маркет — контроль цен на витрине\n"
         f"🔴 Ниже РРЦ: {len(red)}\n"
-        f"🟡 Ниже ориентира РРЦ+200 ₽: {len(yellow)}\n"
-        f"✅ Соответствуют: {stats['OK']}\n"
+        f"🟡 Ниже РРЦ+200 ₽ более чем на 10 ₽: {len(yellow)}\n"
+        f"✅ В пределах ориентира: {stats['OK'] - stats.get('above_target', 0)}\n"
+        f"ℹ️ Выше РРЦ+1 000 ₽ (допуск 10 ₽): {len(above)}\n"
         f"⚪ Нет цены: {stats['PRICE_NOT_NUMERIC']}; нет РРЦ: {stats['MISSING_RRP']}"
     )
     sections = [summary]
@@ -54,7 +57,15 @@ def format_alerts(results: list[dict], stats: dict) -> list[str]:
                 for r in yellow
             )
         )
-    if not red and not yellow:
+    if above:
+        sections.append(
+            "ℹ️ Выше РРЦ+1 000 ₽ более чем на 10 ₽ (без автоснижения)\n" + "\n".join(
+                f"• {r['offer_id']}: покупатель {money(r['display_price'])} ₽, "
+                f"верх ориентира {money(r['target_upper'])} ₽"
+                for r in above
+            )
+        )
+    if not red and not yellow and not above:
         sections.append("Отклонений по подтверждённым ценам нет.")
     # Keep all violations even if alert exceeds Telegram's 4096-char limit.
     messages = []

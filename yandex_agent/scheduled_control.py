@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ozon_agent.business_rules import is_clearance_sku
 from ozon_agent.price_alert import _high_price_rule
+from ozon_agent.pricing_policy import price_band_deviation, target_band
 from ozon_agent.telegram import send_telegram
 from statistics import median
 
@@ -60,6 +61,7 @@ def add_history(rows, history):
 def report_lines(changes, skipped, latest, high, rrp_map):
     by_sku = {str(r.get("offerId") or ""): number(r.get("onDisplay")) for r in latest}
     remaining = []
+    above_target = []
     for row in latest:
         sku = str(row.get("offerId") or "")
         value = number(row.get("onDisplay"))
@@ -69,12 +71,15 @@ def report_lines(changes, skipped, latest, high, rrp_map):
         status, target = classify(value, rrp, sku)
         if status != "OK":
             remaining.append({"sku": sku, "status": status, "price": value, "rrp": rrp, "target": target})
+        if price_band_deviation(value, rrp, sku) == "ABOVE":
+            above_target.append({"sku": sku, "price": value, "upper": target_band(rrp, sku)[1]})
     red = sorted((x for x in remaining if x["status"] == "RED"), key=lambda x: x["price"] - x["rrp"])
     yellow = sorted((x for x in remaining if x["status"] == "YELLOW"), key=lambda x: x["price"] - x["target"])
     lines = ["Яндекс Маркет — контроль после автокоррекции",
              f"Изменено цен: {len(changes)}; пропущено: {len(skipped)}",
              f"🔴 Ниже РРЦ: {len(red)}",
-             f"🟡 Ниже ориентира РРЦ+200 ₽: {len(yellow)}",
+             f"🟡 Ниже РРЦ+200 ₽ более чем на 10 ₽: {len(yellow)}",
+             f"ℹ️ Выше РРЦ+1 000 ₽ более чем на 10 ₽: {len(above_target)}",
              f"⚪ Аномально высокая цена: {len(high)}"]
     for title, subset in (("🔴 Ниже РРЦ", red), ("🟡 Ниже ориентира РРЦ+200 ₽", yellow)):
         if subset:
@@ -86,6 +91,12 @@ def report_lines(changes, skipped, latest, high, rrp_map):
                              f"{'РРЦ' if x['status']=='RED' else 'ориентир'} "
                              f"{money(x['rrp'] if x['status']=='RED' else x['target'])} ₽"
                              f" → не хватает {money(gap)} ₽")
+    if above_target:
+        lines.append("")
+        lines.append("ℹ️ Выше РРЦ+1 000 ₽ (без автоснижения)")
+        for x in sorted(above_target, key=lambda x: x["upper"] - x["price"]):
+            lines.append(f"• {x['sku']}: покупатель {money(x['price'])} ₽, "
+                         f"верх ориентира {money(x['upper'])} ₽")
     if high:
         lines.append("")
         lines.append("⚪ Аномально высокая цена")

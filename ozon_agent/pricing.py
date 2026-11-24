@@ -12,7 +12,7 @@ from typing import Iterable, TYPE_CHECKING
 if TYPE_CHECKING:
     from ozon_export.client import OzonClient
 from .economics import EconomicsInput, calculate_economics
-from .pricing_policy import target_band
+from .pricing_policy import target_band, price_band_deviation
 
 
 def fetch_price_rows(client: "OzonClient", product_ids: Iterable[int]) -> list[dict]:
@@ -149,10 +149,16 @@ def evaluate_customer_price_policy(*, customer_price: float | None, rrp: float,
             "CRITICAL",
             f"Цена для покупателя {customer_price:.2f} ниже РРЦ ({rrp:.2f}).",
         )
-    if customer_price < floor:
+    deviation = price_band_deviation(customer_price, rrp, offer_id)
+    if deviation == "BELOW":
         return (
             "WARNING",
-            f"Цена для покупателя {customer_price:.2f} ниже предпочтительного диапазона РРЦ+200–500 ₽ ({floor:.2f}).",
+            f"Цена для покупателя {customer_price:.2f} ниже предпочтительного минимума РРЦ+200 ₽ ({floor:.2f}) более чем на 10 ₽.",
+        )
+    if deviation == "ABOVE":
+        return (
+            "WARNING",
+            f"Цена для покупателя {customer_price:.2f} превышает РРЦ+1000 ₽ более чем на 10 ₽.",
         )
     return (
         "OK",

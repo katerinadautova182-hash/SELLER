@@ -54,7 +54,9 @@ def test_html_cleanup_keeps_visible_pay_label():
 def test_rrp_thresholds():
     assert classify(999, 1000, "MS701")[0] == "RED"
     assert classify(1000, 1000, "MS701")[0] == "YELLOW"
-    assert classify(1199, 1000, "MS701")[0] == "YELLOW"
+    assert classify(1189, 1000, "MS701")[0] == "YELLOW"
+    assert classify(1190, 1000, "MS701")[0] == "OK"
+    assert classify(1199, 1000, "MS701")[0] == "OK"
     status, floor = classify(1200, 1000, "MS701")
     assert status == "OK"
     assert floor == 1200
@@ -62,3 +64,10 @@ def test_rrp_thresholds():
 
 def test_accessory_only_has_hard_rrp_check():
     assert classify(1020, 1000, "J304") == ("OK", 1000.0)
+
+
+def test_yandex_above_band_deviation_respects_upper_tolerance():
+    from ozon_agent.pricing_policy import price_band_deviation
+    assert price_band_deviation(2010, 1000, "MS701") == "IN_BAND"
+    assert price_band_deviation(2011, 1000, "MS701") == "ABOVE"
+    assert price_band_deviation(2011, 1000, "J304") is None

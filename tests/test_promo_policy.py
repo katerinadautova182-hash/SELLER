@@ -42,8 +42,8 @@ def test_8828_nonblack_uses_common_family_base():
     assert promo_rrp("MS8828 BLACK", 1100.0, rrp) == 1100.0
 
 
-def test_promo_target_stays_in_new_rrp_plus_200_500_band():
+def test_promo_target_stays_in_new_rrp_plus_200_1000_band():
     rrp = {"MS9905": 1000.0}
-    assert target_buyer_price("MS9905", 1000.0, rrp, mode="promo") == 1000.0
-    assert target_buyer_price("MS9905", 1000.0, rrp, mode="restore") == 1300.0
+    assert target_buyer_price("MS9905", 1000.0, rrp, mode="promo") == 900.0
+    assert target_buyer_price("MS9905", 1000.0, rrp, mode="restore") == 1200.0
     assert target_buyer_price("J304", 1000.0, rrp, mode="promo") is None

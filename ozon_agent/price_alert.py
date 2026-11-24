@@ -21,7 +21,7 @@ from statistics import median
 from .business_rules import is_clearance_sku, canonical_sku, manual_rrp, box_rule
 from .catalog import normalize_sku
 from .promo_policy import effective_rrp
-from .pricing_policy import target_band
+from .pricing_policy import target_band, price_band_deviation
 from .telegram import send_telegram
 
 PRICE_HISTORY_LIMIT = 28       # 7 days at the current 6-hour schedule
@@ -82,6 +82,7 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         band = target_band(rrp, offer_id, item.get('name'))
         floor = band[0] if band else float(ceil(rrp))
         price = float(price)
+        deviation = price_band_deviation(price, rrp, offer_id, item.get('name'))
         row = {
             "offer_id": offer_id,
             "customer_price": price,
@@ -93,9 +94,9 @@ def collect_violations(snapshot: dict, rrp_map: dict[str, float]) -> tuple[list[
         }
         if price < rrp:
             red.append(row)
-        elif band and price < floor:
+        elif deviation == "BELOW":
             yellow.append(row)
-        elif band and price > band[1]:
+        elif deviation == "ABOVE":
             stats["above_target"].append(row)
     red.sort(key=lambda x: (-x["gap_to_rrp"], x["offer_id"]))
     yellow.sort(key=lambda x: (-x["gap_to_floor"], x["offer_id"]))
@@ -180,6 +181,8 @@ def fingerprint(red: list[dict], yellow: list[dict], stats: dict, white: list[di
     canonical = {
         "red": [[v["offer_id"], round(v["customer_price"], 2), round(v["rrp"], 2)] for v in red],
         "yellow": [[v["offer_id"], round(v["customer_price"], 2), round(v["floor"], 2)] for v in yellow],
+        "above_target": [[v["offer_id"], round(v["customer_price"], 2),
+                          round(v["target_upper"], 2)] for v in stats.get("above_target", [])],
         "white": [
             [v["offer_id"], round(v["customer_price"], 2), round(v["baseline_price"], 2)]
             for v in white
@@ -196,8 +199,8 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list
     lines = [
         "Ozon — контроль цен",
         f"🔴 Ниже РРЦ: {len(red)}",
-        f"🟡 Ниже ориентира РРЦ + 200 ₽: {len(yellow)}",
-        f"ℹ️ Выше ориентира РРЦ + 500 ₽: {len(stats.get('above_target', []))}",
+        f"🟡 Ниже РРЦ + 200 ₽ более чем на 10 ₽: {len(yellow)}",
+        f"ℹ️ Выше РРЦ + 1 000 ₽ (допуск 10 ₽): {len(stats.get('above_target', []))}",
         f"⚪ Аномально высокая цена: {len(white)}",
     ]
 
@@ -225,7 +228,7 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list
     above = stats.get("above_target", [])
     if above:
         lines.append("")
-        lines.append("ℹ️ Выше диапазона РРЦ + 200–500 ₽ (без автоснижения)")
+        lines.append("ℹ️ Выше РРЦ + 1 000 ₽ более чем на 10 ₽ (без автоснижения)")
         for v in above[:15]:
             lines.append(f"• {v['offer_id']}: покупатель {v['customer_price']:,.0f} ₽; верх ориентира {v['target_upper']:,.0f} ₽")
         if len(above) > 15:
@@ -284,7 +287,7 @@ def main() -> None:
     state_path.write_text(
         json.dumps({
             "fingerprint": fp,
-            "count": len(red) + len(yellow) + len(white),
+            "count": len(red) + len(yellow) + len(white) + len(stats.get('above_target', [])),
             "price_history": updated_history,
         }, ensure_ascii=False),
         encoding="utf-8",

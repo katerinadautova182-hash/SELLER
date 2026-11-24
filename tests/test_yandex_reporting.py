@@ -42,3 +42,17 @@ def test_owner_confirmed_grooming_alias():
     value, source = resolve_rrp("Груминг", {})
     assert value == 18700
     assert source == "owner_confirmed_grooming_alias"
+
+
+def test_above_1000_plus_tolerance_is_reported_without_repricing():
+    rows = [{
+        "offer_id": "MS701", "status": "OK", "display_price": 2011,
+        "rrp": 1000, "target_price": 1200, "target_upper": 2000,
+        "above_target": True,
+    }]
+    stats = {"OK": 1, "PRICE_NOT_NUMERIC": 0, "MISSING_RRP": 0,
+             "above_target": 1}
+    message = "\n".join(format_alerts(rows, stats))
+    assert "Выше РРЦ+1 000 ₽" in message
+    assert "MS701: покупатель 2 011 ₽" in message
+    assert "Отклонений по подтверждённым ценам нет" not in message

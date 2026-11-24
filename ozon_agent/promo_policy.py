@@ -108,7 +108,7 @@ def effective_rrp(offer_id: str | None, base_rrp: float | None,
 
 def target_buyer_price(offer_id: str | None, base_rrp: float | None,
                        rrp_map: dict[str, float], *, mode: str) -> float | None:
-    """Return RRP+300 RUB steering point for promo or restoration."""
+    """Return RRP+200 RUB steering point for promo or restoration."""
     if base_rrp is None or not is_promo_offer(offer_id):
         return None
     rrp = promo_rrp(offer_id, base_rrp, rrp_map) if mode == "promo" else float(base_rrp)
