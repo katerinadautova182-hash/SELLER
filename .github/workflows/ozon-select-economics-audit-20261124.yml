@@ -5,6 +5,7 @@ on:
       - claude/ozon-seller-product-export-nubra0
     paths:
       - ".github/workflows/ozon-select-economics-audit-20261124.yml"
+      - "reporting/ozon_select_margin_probe_20261124.py"
   workflow_dispatch:
 permissions:
   contents: read
