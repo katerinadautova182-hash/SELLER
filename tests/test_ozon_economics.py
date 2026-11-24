@@ -60,11 +60,14 @@ def test_customer_price_policy_uses_red_yellow_green_zones():
     status, _ = evaluate_customer_price_policy(customer_price=999, rrp=1000)
     assert status == "CRITICAL"
 
-    status, _ = evaluate_customer_price_policy(customer_price=1199, rrp=1000, offer_id="MS701")
+    status, _ = evaluate_customer_price_policy(customer_price=1189, rrp=1000, offer_id="MS701")
     assert status == "WARNING"
 
-    status, _ = evaluate_customer_price_policy(customer_price=1200, rrp=1000, offer_id="MS701")
-    assert status == "OK"
+    for price in (1190, 1199, 1200, 2000, 2010):
+        status, _ = evaluate_customer_price_policy(customer_price=price, rrp=1000, offer_id="MS701")
+        assert status == "OK"
+    status, _ = evaluate_customer_price_policy(customer_price=2011, rrp=1000, offer_id="MS701")
+    assert status == "WARNING"
 
 
 def test_accessories_are_not_forced_into_equipment_markups():
