@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
-from .pricing_policy import target_band
+from .pricing_policy import target_band, TARGET_TOLERANCE_RUB
 
 IMPORT_LOGISTICS_FACTOR = 1.35  # purchase price + 35% delivery/customs
-RRP_FLOOR_FACTOR = 1.00         # hard RRP floor; preferred equipment band is +200..500 RUB
+RRP_FLOOR_FACTOR = 1.00         # hard RRP floor; preferred equipment band is +200..1000 RUB
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ def calculate_economics(p: EconomicsInput) -> EconomicsResult:
     operating margin = profit / price
 
     Hard commercial floor is RRP. For identified main equipment, the preferred
-    buyer-price band is RRP+200..500 RUB (advisory, not a hard legal floor).
+    buyer-price band is RRP+200..1000 RUB (advisory, not a hard legal floor).
     The economic floor can be higher when Ozon costs require it.
     """
     _validate(p)
@@ -98,9 +98,9 @@ def calculate_economics(p: EconomicsInput) -> EconomicsResult:
     elif p.current_price < minimum_allowed:
         status = "DANGER"
         reason = "Цена прибыльна, но не обеспечивает заданную минимальную маржинальность."
-    elif target_band(p.rrp, p.offer_id) and p.current_price < target_band(p.rrp, p.offer_id)[0]:
+    elif target_band(p.rrp, p.offer_id) and p.current_price < target_band(p.rrp, p.offer_id)[0] - TARGET_TOLERANCE_RUB:
         status = "WARNING"
-        reason = "Цена ниже предпочтительного диапазона РРЦ + 200–500 ₽."
+        reason = "Цена ниже предпочтительного минимума РРЦ + 200 ₽ более чем на 10 ₽."
     elif safety_buffer < 5:
         status = "WARNING"
         reason = "Слишком маленький запас до точки безубыточности."
