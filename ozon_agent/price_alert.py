@@ -199,7 +199,7 @@ def format_message(red: list[dict], yellow: list[dict], stats: dict, white: list
     lines = [
         "Ozon — контроль цен",
         f"🔴 Ниже РРЦ: {len(red)}",
-        f"🟡 Ниже ориентира РРЦ + 200 ₽: {len(yellow)}",
+        f"🟡 Ниже РРЦ + 200 ₽ более чем на 10 ₽: {len(yellow)}",
         f"ℹ️ Выше РРЦ + 1 000 ₽ (допуск 10 ₽): {len(stats.get('above_target', []))}",
         f"⚪ Аномально высокая цена: {len(white)}",
     ]
