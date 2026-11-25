@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   correction:
-    if: ${{ github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Enable one-time Yandex pricing trial') }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:

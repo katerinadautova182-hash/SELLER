@@ -1,14 +1,7 @@
-"""Scheduled Yandex price corrections and history-based high-price alerts.
-
-For every six-hour run, RED increases seller price by missing buyer-side
-amount once, YELLOW increases seller price by 3% once. Report is re-read
-after the update; WHITE alerts compare current prices to preceding runs.
-"""
+"""Monitor Yandex buyer prices and report deviations every six hours."""
 from __future__ import annotations
 
 import json
-import os
-import time
 from pathlib import Path
 
 from ozon_agent.business_rules import is_clearance_sku
@@ -19,7 +12,7 @@ from statistics import median
 
 from .client import YandexMarketClient
 from .official_prices import obtain_report, number
-from .one_shot_reprice import apply_one_shot, candidates
+from .one_shot_reprice import candidates
 from .price_check import _catalog, classify, load_rrp, resolve_rrp
 from .reporting import money
 
@@ -75,8 +68,8 @@ def report_lines(changes, skipped, latest, high, rrp_map):
             above_target.append({"sku": sku, "price": value, "upper": target_band(rrp, sku)[1]})
     red = sorted((x for x in remaining if x["status"] == "RED"), key=lambda x: x["price"] - x["rrp"])
     yellow = sorted((x for x in remaining if x["status"] == "YELLOW"), key=lambda x: x["price"] - x["target"])
-    lines = ["Яндекс Маркет — контроль после автокоррекции",
-             f"Изменено цен: {len(changes)}; пропущено: {len(skipped)}",
+    lines = ["Яндекс Маркет — контроль цен",
+             f"Рекомендаций: {len(changes)}; пропущено: {len(skipped)}",
              f"🔴 Ниже РРЦ: {len(red)}",
              f"🟡 Ниже РРЦ+200 ₽ более чем на 10 ₽: {len(yellow)}",
              f"ℹ️ Выше РРЦ+1 000 ₽ более чем на 10 ₽: {len(above_target)}",
@@ -125,8 +118,6 @@ def send_lines(lines):
 
 
 def main():
-    if os.getenv("YANDEX_SCHEDULED_CORRECTION_ENABLED") != "YES":
-        raise RuntimeError("Scheduled corrections disabled")
     rrp_map = load_rrp()
     client = YandexMarketClient()
     catalog, _, _ = _catalog(client)
@@ -142,20 +133,11 @@ def main():
     history = saved.get("history") or {}
     high = detect_high_prices(before, history)
     proposed, skipped = candidates(before, rrp_map)
-    # Both RED and YELLOW are eligible, one increase each.
-    # The 200-SKU safety limit covers normal batches; writes are split into chunks of 40.
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     state = {"business_id": business_id, "planned": proposed, "skipped": skipped,
              "high_price_alerts": high, "write_sent": False}
     OUTPUT_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), "utf-8")
-    if proposed:
-        apply_one_shot(client, business_id, proposed)
-        state["write_sent"] = True
-        OUTPUT_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), "utf-8")
-        time.sleep(155)  # report generation quota: at least two minutes
-        after = obtain_report(client, business_id)
-    else:
-        after = before
+    after = before
     lines, remaining = report_lines(proposed, skipped, after, high, rrp_map)
     state["remaining"] = remaining
     state["buyer_after"] = {str(r.get("offerId")): number(r.get("onDisplay"))

@@ -2,12 +2,6 @@ name: WB Buyer Price RRP Control
 
 on:
   workflow_dispatch:
-    inputs:
-      apply:
-        description: "Actually submit safe upward price corrections"
-        required: true
-        default: false
-        type: boolean
   schedule:
     - cron: "17 */2 * * *"
 
@@ -32,7 +26,7 @@ jobs:
       WB_RRP_BUFFER_PCT: ${{ vars.WB_RRP_BUFFER_PCT || '5' }}
       WB_REPRICE_MAX_STEP_PCT: ${{ vars.WB_REPRICE_MAX_STEP_PCT || '20' }}
       WB_REPRICE_CONFIRM_SECONDS: "5"
-      WB_REPRICE_APPLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.apply) || (github.event_name == 'schedule' && vars.WB_AUTO_REPRICE == '1') }}
+      WB_REPRICE_APPLY: "false"
 
     steps:
       - uses: actions/checkout@v4

@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   reprice:
-    if: ${{ github.event_name != 'push' || (github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Run one RED Yandex correction now')) }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

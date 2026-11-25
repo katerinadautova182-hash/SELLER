@@ -41,13 +41,12 @@ jobs:
           key: yandex-buyer-history-${{ github.run_id }}
           restore-keys: |
             yandex-buyer-history-
-      - name: Correct RED once and YELLOW once, then check
+      - name: Check prices and report deviations
         env:
           YANDEX_MARKET_API_KEY: ${{ secrets.YANDEX_MARKET_API_KEY }}
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          YANDEX_SCHEDULED_CORRECTION_ENABLED: 'YES'
         run: python -u -m yandex_agent.scheduled_control
       - name: Save updated buyer-price history
         if: success()

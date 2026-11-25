@@ -8,12 +8,6 @@ on:
       - "data/wb_buyer_latest.csv"
       - "data/wb_continue_batch.txt"
   workflow_dispatch:
-    inputs:
-      apply:
-        description: "Submit up to 30 capped price updates (unchecked = audit only)"
-        type: boolean
-        required: true
-        default: false
 
 permissions:
   contents: read
@@ -43,14 +37,12 @@ jobs:
           key: wb-daily-firstpass-ledger-${{ github.run_id }}
           restore-keys: |
             wb-daily-firstpass-ledger-
-      - name: Compare and submit controlled first pass
+      - name: Compare buyer prices in audit mode
         env:
           WB_API_KEY: ${{ secrets.WB_API_KEY }}
           RRP_MAP_B64: ${{ secrets.RRP_MAP_B64 }}
           TELEGRAM_WB_BOT_TOKEN: ${{ secrets.TELEGRAM_WB_BOT_TOKEN }}
           TELEGRAM_WB_CHAT_ID: ${{ secrets.TELEGRAM_WB_CHAT_ID }}
-          WB_GITHUB_FIRST_PASS_APPROVED: "YES"
-          FIRSTPASS_APPLY: ${{ github.event_name == 'push' || inputs.apply }}
           REQUIRE_PREVIOUS_LEDGER: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[continue-wb]') }}
         run: |
           if [ -z "$WB_API_KEY" ] || [ -z "$RRP_MAP_B64" ]; then
@@ -61,11 +53,7 @@ jobs:
             echo "::error::Continuation cannot start without the previous submitted SKU ledger. No writes made."
             exit 2
           fi
-          if [ "$FIRSTPASS_APPLY" = "true" ]; then
-            python -m wb_agent.github_daily_correction --csv data/wb_buyer_latest.csv --max-age-hours 36 --max-candidates 30 --max-step-pct 5 --apply
-          else
-            python -m wb_agent.github_daily_correction --csv data/wb_buyer_latest.csv --max-age-hours 36 --max-candidates 30 --max-step-pct 5
-          fi
+          python -m wb_agent.github_daily_correction --csv data/wb_buyer_latest.csv --max-age-hours 36 --max-candidates 30 --max-step-pct 5
       - name: Preserve pending upload ledger between workflow runs
         uses: actions/cache/save@v4
         if: always()
